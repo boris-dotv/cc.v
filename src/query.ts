@@ -228,6 +228,7 @@ export async function* query(
 > {
   const consumedCommandUuids: string[] = []
   const terminal = yield* queryLoop(params, consumedCommandUuids)
+  // 只 yield 两个东西：流事件（StreamEvent 和 RequestStartEvent）和消息（Message）
   // Only reached if queryLoop returned normally. Skipped on throw (error
   // propagates through yield*) and on .return() (Return completion closes
   // both generators). This gives the same asymmetric started-without-completed
@@ -235,6 +236,8 @@ export async function* query(
   for (const uuid of consumedCommandUuids) {
     notifyCommandLifecycle(uuid, 'completed')
   }
+  // 提问：你说的 uuid 在这里指的是什么，我知道 uuid 的意思，但是你可以具体一点，我在使用 claude code 的时候发生了什么然后什么环节的什么对象的 uuid 传到这里来了你可以举例子说说吗？
+  // 提问：QueryParams 是谁发送的？
   return terminal
 }
 
@@ -261,10 +264,12 @@ async function* queryLoop(
     skipCacheWrite,
   } = params
   const deps = params.deps ?? productionDeps()
+  // 提问：可以都举个例子说明一下这里的每一个元素都代表了什么吗？既然你说了最值得记的工程模式，是整个 query 生命周期都不变的东西。
 
   // Mutable cross-iteration state. The loop body destructures this at the top
   // of each iteration so reads stay bare-name (`messages`, `toolUseContext`).
   // Continue sites write `state = { ... }` instead of 9 separate assignments.
+  // 每个 continue 站点都重新整体赋值 👆
   let state: State = {
     messages: params.messages,
     toolUseContext: params.toolUseContext,
@@ -278,6 +283,7 @@ async function* queryLoop(
     transition: undefined,
   }
   const budgetTracker = feature('TOKEN_BUDGET') ? createBudgetTracker() : null
+  // 提问：你可以大概都举一些例子说说这些会迭代的东西都是什么吗？
 
   // task_budget.remaining tracking across compaction boundaries. Undefined
   // until first compact fires — while context is uncompacted the server can
@@ -293,6 +299,7 @@ async function* queryLoop(
   // Snapshot immutable env/statsig/session state once at entry. See QueryConfig
   // for what's included and why feature() gates are intentionally excluded.
   const config = buildQueryConfig()
+  // session/env/statsig 这些"在 query 期间不可能变"的东西只在进入 queryLoop 时拍一次快照
 
   // Fired once per user turn — the prompt is invariant across loop iterations,
   // so per-iteration firing would ask sideQuery the same question N times.
@@ -302,6 +309,7 @@ async function* queryLoop(
     state.messages,
     state.toolUseContext,
   )
+  // 没太听懂什么叫用了 using，什么叫 TC39 的 using declaration，generator 的 dispose
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -309,6 +317,7 @@ async function* queryLoop(
     // is reassigned within an iteration (queryTracking, messages updates);
     // the rest are read-only between continue sites.
     let { toolUseContext } = state
+    // 这里用 let，其他是 const，这是一个明确信号：这一轮里，只有 toolUseContext 会被原地修改，quesyTracking、tools refresh 都会重写它
     const {
       messages,
       autoCompactTracking,
@@ -335,6 +344,7 @@ async function* queryLoop(
     )
 
     yield { type: 'stream_request_start' }
+    // 这是一个对外标记，告诉消费者（提问：消费者是什么意思，就是用 claude code 的人吗）一次新的 API 请求要开始了，同时跟界面的 UI 渲染挂钩
 
     queryCheckpoint('query_fn_entry')
 
@@ -362,6 +372,25 @@ async function* queryLoop(
       queryTracking,
     }
 
+    // ─── messages 改造主干（callModel 之前的所有事） ────────────────────────
+    //
+    //   messages (来自上一轮 state)
+    //      │
+    //      ▼  getMessagesAfterCompactBoundary       截掉 compact 边界前的旧消息
+    //      ▼  applyToolResultBudget                 大 tool result → placeholder
+    //      ▼  [HISTORY_SNIP]    跳过                 feature gate 后的策略
+    //      ▼  deps.microcompact                     微压缩
+    //      ▼  [CONTEXT_COLLAPSE] 跳过                feature gate 后的策略
+    //      ▼  deps.autocompact                      大压缩（必要时整段重写）
+    //      ▼  [CONTEXT_COLLAPSE] 跳过                feature gate 后的策略
+    //      ▼  calculateTokenWarningState            硬阻断检查
+    //      │
+    //   messagesForQuery (准备喂给 callModel)
+    //
+    // 主干只有 4 件事：截断历史 / 裁剪工具结果 / （必要时）压缩 / （必要时）阻断。
+    // 其它带 feature() 的分支今天全部当不存在。
+    // ─────────────────────────────────────────────────────────────────────────
+
     let messagesForQuery = [...getMessagesAfterCompactBoundary(messages)]
 
     let tracking = autoCompactTracking
@@ -376,6 +405,8 @@ async function* queryLoop(
     const persistReplacements =
       querySource.startsWith('agent:') ||
       querySource.startsWith('repl_main_thread')
+    
+    // 它会把太大的 tool result 替换成 placeholder（"[content removed to fit budget]"），并把替换记录写到 contentReplacementState，一个典型的上下文管理策略。
     messagesForQuery = await applyToolResultBudget(
       messagesForQuery,
       toolUseContext.contentReplacementState,
@@ -644,6 +675,7 @@ async function* queryLoop(
           error: 'invalid_request',
         })
         return { reason: 'blocking_limit' }
+        // 第一个早退点，上下文超上限，API 将不发送，直接结束这一轮 query，提问：这里会缓存下 query 然后取 compact 再重新走一遍 queryLoop 是吗？
       }
     }
 
@@ -652,11 +684,22 @@ async function* queryLoop(
     queryCheckpoint('query_api_loop_start')
     try {
       while (attemptWithFallback) {
+        // 外层是为了 fallback 模型，主模型超载就切到 fallback 重发一次
         attemptWithFallback = false
         try {
           let streamingFallbackOccured = false
           queryCheckpoint('query_api_streaming_start')
+          // ╔═══════════════════════════════════════════════════════════════╗
+          // ║ ⭐ START — 流循环体（站点 5）：harness 最值得细读的 ~50 行      ║
+          // ║   为什么重要：这是「模型输出」和「harness 内部状态」唯一的        ║
+          // ║   接触点。每条 stream message 进来做三件事：                   ║
+          // ║     ① 是否要 tombstone？（fallback 时清空已 yield 的消息）    ║
+          // ║     ② 是否要 clone & yield？（tool_use 输入 backfill）       ║
+          // ║     ③ 是否要 push & 收集 tool_use？（设置 needsFollowUp）    ║
+          // ║   读懂这段 = 理解 harness 的数据流主干。                       ║
+          // ╚═══════════════════════════════════════════════════════════════╝
           for await (const message of deps.callModel({
+            // callModel 是 deps 注入的（productionDeps()），这是整个 harness 跟 API 唯一的接触点
             messages: prependUserContext(messagesForQuery, userContext),
             systemPrompt: fullSystemPrompt,
             thinkingConfig: toolUseContext.options.thinkingConfig,
@@ -721,7 +764,7 @@ async function* queryLoop(
                 queryChainId: queryChainIdForAnalytics,
                 queryDepth: queryTracking.depth,
               })
-
+              // 提问：fallback 具体是什么意思呢？在这里具体来说 fallback 做了什么事情呢？下面的几行就是清空 assistantMessages 对吧？最值得细读的 50 行是不是可以单独拿一天来看看，这 50 行为什么重要呢？
               assistantMessages.length = 0
               toolResults.length = 0
               toolUseBlocks.length = 0
@@ -862,6 +905,9 @@ async function* queryLoop(
             }
           }
           queryCheckpoint('query_api_streaming_end')
+          // ╔═══════════════════════════════════════════════════════════════╗
+          // ║ ⭐ END — 流循环体结束                                          ║
+          // ╚═══════════════════════════════════════════════════════════════╝
 
           // Yield deferred microcompact boundary message using actual API-reported
           // token deletion count instead of client-side estimates.
@@ -1060,6 +1106,7 @@ async function* queryLoop(
     }
 
     if (!needsFollowUp) {
+      // 模型没要工具，本回合到此为止？
       const lastMessage = assistantMessages.at(-1)
 
       // Prompt-too-long recovery: the streaming loop withheld the error
@@ -1380,10 +1427,12 @@ async function* queryLoop(
     const toolUpdates = streamingToolExecutor
       ? streamingToolExecutor.getRemainingResults()
       : runTools(toolUseBlocks, assistantMessages, canUseTool, toolUseContext)
+    // runTools 是工具编排，是一个独立子系统，它会 yield 两种东西：消息和新 context
 
     for await (const update of toolUpdates) {
       if (update.message) {
         yield update.message
+        // 透传给外部 consumer
 
         if (
           update.message.type === 'attachment' &&
@@ -1713,7 +1762,7 @@ async function* queryLoop(
 
     queryCheckpoint('query_recursive_call')
     const next: State = {
-      messages: [...messagesForQuery, ...assistantMessages, ...toolResults],
+      messages: [...messagesForQuery, ...assistantMessages, ...toolResults], // 这是骨架里最重要的一行，messages = 这一轮喂给 API 的输入 + assistant 回复的内容 + 工具调用的结果（包含 attachments），这就是 ping-pong 累积
       toolUseContext: toolUseContextWithQueryTracking,
       autoCompactTracking: tracking,
       turnCount: nextTurnCount,
