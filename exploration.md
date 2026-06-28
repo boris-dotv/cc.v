@@ -1,4 +1,22 @@
 
+## Qwen Code Agent 实习 JD
+
+> 来源:栗栗子老师 2026-05-25,投递 `busi.wp@alibaba-inc.com`
+
+### Track 1 — Black-box Agent RL / Online Learning
+- Black-box reward / value function 建模与优化
+- Online RL 框架设计,支持 agent 在真实环境持续探索与策略迭代
+- Long-horizon RL 下的 credit assignment 与 multi-step reasoning
+
+### Track 2 — Computer-Use Agent (Claw/CLI Agent) 建设
+- 海量真实用户交互数据 scale(办公、流程自动化、coding),构建部署-反馈-回流-训练完整链路
+- 构建 code/cli centric 的 agent model,通过 bash / skills / mcp 执行各类数字任务
+- AI agents 的自进化,探索 vibe research 等场景,覆盖 PaperBench、MLE-Bench 等
+
+### Track 3 — CLI Anything
+- 把任意网站 / 桌面应用 / 本地工具统一转化为标准化 CLI,为 agent 构建开放式工具环境
+- 基于 Web 与 Desktop App 构成的 live environments 训练 open-ended agents
+
 ## 我关注的问题
 
 ### memory
@@ -35,6 +53,93 @@
 - 后台 subagent（`BG_SESSIONS`）和主 agent 怎么通信？`shouldAvoidPermissionPrompts` 是怎么让 background agent 不卡在权限弹窗的？
 - 24 小时自主任务的"目标定义"放在哪？CLAUDE.md / appendSystemPrompt / 初始 user message —— 哪种活得最久不被 compact 掉？
 - 这套 automode 跑出来的 trajectory 有哪些 telemetry signal 被采集？哪些信号能反推"这次 autonomous run 是否高质量"用作 RL reward？
+
+### tool 接力 / 隐式 pipeline
+
+> 起因:别的 Claude session 拿到 arxiv PDF 后去装 poppler 跑 pdftotext，没走 Read → document block → API 服务端解析的正路。
+
+- 一条"读 PDF"链路在 CC 里是怎么走的：WebFetch 落盘 → tool result 末尾埋 `persistedPath` 那行字 → 主模型读到提示 → 调 Read → `readPDF` base64 → document block 通过 `newMessages` 通道注入 user message → API 服务端原生解析。**整条链没有 hardcoded pipeline，全靠 prompt 暗示接力。**
+- WebFetch 末尾那行 `[Binary content (...) also saved to ...]` 是个"next-step hint"。这种"一个 tool 的 output text 里埋 hint 让模型选下一个 tool"的模式，CC 里还有哪些？句式有没有规律？
+- 失败模式：persistedPath 提示在场，模型仍然偏向去装本机工具（poppler / pdftotext）。是 hint 不够显眼、还是模型先验太强？什么样的措辞 / system-reminder 能 nudge 回正确路径？
+- `document` block 必须通过 `newMessages` 注入新 user message，不能放 `tool_result` —— 这是 API 的硬限制。还有哪些 content type 受这个限制？harness 里所有走 newMessages 的注入点能不能列全？
+- `isBinaryContentType` + `persistBinaryContent`（src/utils/mcpOutputStorage.ts）这套基础设施给 WebFetch 用了一次。MCP tool 的 binary output（`ReadMcpResourceTool`）走的是不是同一套？路径命名、扩展名映射有没有共享？
+- 跨工具链路的"PDF 不可逆毒丸"：一旦把伪装 PDF 塞进 document block，后续 API 调用全 400。`pdf.ts:72-86` 用 magic byte 在入口卡死。还有哪些 content 一旦进 history 就让 session 不可恢复？harness 在哪些位置加了类似的入口校验？
+
+### attribution header / 3P cache 真相
+
+> 起因:知乎那篇骂 Anthropic"故意让 3P 变慢"的帖子,以及网友补的一长串 env var 配置。回头亲自把每个 var 在源码里 grep 一遍,看哪些真存在、哪些是编的。
+
+源码核对结果(2026-06-03 时点 v2.1.88):
+
+| 文章 / 网友给的 var | 源码 | 真实作用 |
+|---|---|---|
+| `CLAUDE_CODE_ATTRIBUTION_HEADER` | `src/constants/system.ts:52-95` | 真。默认开,关掉去掉 `x-anthropic-billing-header: cc_version=...; cc_entrypoint=...;` 这块 prefix |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | `src/utils/privacyLevel.ts:21` | 真。`essential-traffic` 级别,屏蔽 telemetry + auto-update + MCP registry + grove + release notes |
+| `DISABLE_TELEMETRY` | `src/utils/privacyLevel.ts:24` | 真。`no-telemetry` 级别,只屏 Datadog/1P 事件/feedback survey |
+| `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS` | `src/utils/gitSettings.ts:14` | 真。砍 git 相关 sysprompt,纯省 token |
+| `DISABLE_AUTOUPDATER` | `src/utils/config.ts:1739`, `src/migrations/migrateAutoUpdatesToSettings.ts:34` | 真 |
+| `DISABLE_ERROR_REPORTING` | `src/utils/log.ts:173` | 真。关 Sentry |
+| `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY` | `src/components/FeedbackSurvey/*.tsx` 三处 | 真 |
+| `ENABLE_TOOL_SEARCH` | `src/utils/toolSearch.ts:84,185,300` | 真,**3P 用户最有价值的一条**。`toolSearch.ts:282-311` 注释明确写:3P 默认关掉 tool_reference 因为很多代理不支持,但 LiteLLM/CF AI Gateway 是支持的 —— 显式设 `true` / `auto` / `auto:N` 表示"我代理 OK",MCP tool 描述能 lazy load |
+| `ENABLE_LSP_TOOL` | `src/tools.ts:224` | 真 |
+| `ANTHROPIC_BETAS`(复数) | `src/utils/betas.ts:361` | 真。**注意名字** —— 网友写的 `ANTHROPIC_BETA_HEADER` 是错的,正确名字是 `ANTHROPIC_BETAS`,逗号分隔多 beta |
+| `CLAUDE_CODE_ENABLE_FEEDBACK_SURVEY_FOR_OTEL` | 不存在 | 编的 |
+| `DISABLE_NON_ESSENTIAL_MODEL_CALLS` | 不存在 | 编的 |
+| `CLAUDE_CODE_MAX_PROMPT_CACHE_TTL` | 不存在 | 编的 |
+| `ENABLE_PROMPT_CACHING_1H` | 不存在 | 只有 `ENABLE_PROMPT_CACHING_1H_BEDROCK`(`src/services/api/claude.ts:398`),**只对 Bedrock provider 生效**,deepseek / openai-compatible 代理设了无效 |
+| `DO_NOT_TRACK` / `OTEL_SDK_DISABLED` / `SENTRY_DSN` / `ANTHROPIC_TELEMETRY` | src 里 0 references | CC 自己不读;OTEL_* 是 OpenTelemetry SDK 通用 var,CC 用到 otel 时**间接**生效不是 CC 主动检查 |
+
+attribution header 内部机制(回头细读这几个文件):
+
+- 生成: `src/constants/system.ts:73-95` `getAttributionHeader(fingerprint)`。header 字符串组成 = `cc_version=${MACRO.VERSION}.${fingerprint};` + `cc_entrypoint=${env.CLAUDE_CODE_ENTRYPOINT};` + 可选 `cch=00000;` + 可选 `cc_workload=cron;`
+- fingerprint 算法: `src/utils/fingerprint.ts:50-63` `SHA256(SALT + msgText[4] + msgText[7] + msgText[20] + version).slice(0,3)`。**SALT 是硬编码 `'59cf53e54c78'`**。注释说"Do not change without 1P/3P (Bedrock/Vertex/Azure) coordination" —— 说明这是有意保持跨 provider 一致的协议
+- 插入位置: `src/services/api/claude.ts:1358-1369`,放在 `systemPrompt[0]`,在 `getCLISyspromptPrefix()` 之前
+- cache 处理: `src/utils/api.ts:296-433` `splitSysPromptPrefix`。attribution block 在三种模式下都被标 `cacheScope: null`,然后 `buildSystemPromptBlocks`(`src/services/api/claude.ts:3213-3236`)的逻辑是 `cacheScope === null` 就 **不输出 `cache_control` 字段**
+- cch 占位符: `system.ts:64-82` 注释。`feature('NATIVE_CLIENT_ATTESTATION')` 开启时插 `cch=00000`,Bun 的原生 HTTP 栈在发包前用计算出的 attestation token 同长度替换这 5 个 0(避免改 Content-Length / buffer realloc)。这是 per-request 变的唯一字段
+- workload tag: `src/utils/workloadContext.ts` 用 AsyncLocalStorage 传 `cron` 标记,只有 ScheduleCronTool 触发的 query 才有,正常交互 session 没有
+
+回头要搞懂的具体问题:
+
+- session 内 fingerprint 真的稳定吗?compact / autocompact 重写 first user message 后,fingerprint 会变 → attribution header 变 → cache miss?这条还没验证
+- `cch=00000` 这条 attestation 路径,如果走 3P 代理,Bun 客户端到底替换了没?替换之后 3P 怎么处理(把 5 字符占位符当普通字节,所以每次请求 header 不同 → cache miss)?要 mitmproxy 抓一次看
+- `buildSystemPromptBlocks` 三种 cache scope 模式(MCP 在场 / global cache + boundary / default)的设计取舍 —— 见 `src/utils/api.ts:296-433`。这块是工业级 prompt caching 的核心,值得当模板拆掉读
+- `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` 在 sysprompt 里的位置由谁决定?静态/动态边界放错会怎样?
+- `should1hCacheTTL`(`src/services/api/claude.ts:393-414`):为什么只有 Bedrock 提供 env 开关,1P 的 1h cache 必须走 `isClaudeAISubscriber() && !isUsingOverage` + GrowthBook?这是合约/计费问题
+- `PROMPT_CACHING_SCOPE_BETA_HEADER`(`prompt-caching-scope-2026-01-05`,`src/constants/betas.ts:18`)的语义到底是什么 —— scope=org / global 在 Anthropic 服务端怎么实现的?查 Anthropic 官方 prompt caching doc 对照
+
+### stream 死连接 / circuit breaker 缺位
+
+> 起因:遇到过 1-2 小时纯空挂 spinner 还在转的 session，定位下来不是模型在 think，是 SSE 流被中间网络 silent drop，客户端 5 层超时全部失效或被关。
+
+5 层防线现状（src/services/api/claude.ts、client.ts）：
+
+| 层 | 默认行为 | 关键源码 |
+|---|---|---|
+| SDK timeout (10 min) | 只覆盖 initial fetch()，流开始后失效 | `client.ts:144` + `claude.ts:1869-1873` 注释明确写了 |
+| 底层 fetch (undici) body-read | 无 timeout | `client.ts:138-152` 无 keepAlive / socket config |
+| Stream watchdog (90s) | ⭐ **默认 off**，靠 `CLAUDE_ENABLE_STREAM_WATCHDOG` env 启用 | `claude.ts:1874-1928` |
+| Passive stall logger (30s) | 只 log 不 abort + 事件驱动（死流根本不触发） | `claude.ts:1936-1965` |
+| useStalledAnimation (3s 变红) | 只控 UI 颜色，不 abort 请求 + thinking 期间会误红 | `useStalledAnimation.ts:42` |
+
+- 唯一能真 abort 的 watchdog 默认 off —— 设计权衡是什么？误伤长 thinking vs hours-long hang，telemetry 有没有展示真实分布？把它默认 on 会破什么？
+- passive stall logger 是 `for await (part of stream)` 内部检测：流彻底死了 `for-await` 永远阻塞，这个 if 永远不跑。为什么不用独立 setTimeout 心跳？watchdog 用的就是 setTimeout，为什么不复用？
+- Anthropic SDK 的 `timeout` 字段对 streaming body 完全无效 —— 是 SDK design 还是 fetch / SSE spec 的限制？看 SDK 源码确认。
+- watchdog abort 后会走 non-streaming fallback retry (`claude.ts:2305-2334`)。重试时上下文是哪个 snapshot？prompt cache 还能命中吗（毕竟流断的那次 cache write 完成了一半）？
+- 跟 automode/长程自主开发的交集（已经在那一节漏了这条）：24h autonomous run 撞上一次 silent stream drop，用户不在场，整个 run 停在那里。harness 有没有"长跑模式自动开 watchdog / 缩短阈值"的逻辑？没有的话，proactive / KAIROS 模式下应不应该强制开？
+- OS 层的 TCP keepalive 默认 `tcp_keepalive_time=7200` 才触发 —— 在应用层全失效的情况下，2 小时上限就是这个常数决定的。这是个不应该依赖的兜底。
+
+### session 状态拓扑 / rewind / branch / fork / resume
+
+> 起因:想改上一个 prompt、保留之前 context 再问一次。CC 里这条路径牵出来两个完全不同的机制 —— `/rewind`（销毁性 truncate）和 `/branch`（非销毁复制），背后是一整套 session/transcript/file checkpoint 的耦合。
+
+- `/rewind`（`REPL.tsx:3661-3706` `rewindConversationTo`）是 `setMessages(prev.slice(0, idx))` 销毁性砍数组；`/branch`（`commands/branch/branch.ts:61-180` `createFork`）是把整个 transcript 复制到新 sessionId、写 `forkedFrom` 血缘指针。还有哪些操作会写 message array？compact / autocompact / contextCollapse 各自的写法跟这两种比是销毁还是非销毁？
+- truncate message array 时必须级联清的派生缓存：`resetMicrocompactState`、`resetContextCollapse`、`setConversationId(randomUUID())`（`REPL.tsx:3673-3687`）。除此之外还有哪些 ref / cache 持有"message 顺序敏感"的状态？（pinned cache edit 引用 tool_use_id 这条注释提示了一类）
+- `selectableUserMessagesFilter`（`MessageSelector.tsx:767-792`）过滤掉了 tool_result / synthetic / isMeta / compact summary / 命令 stdout / TICK / teammate message —— **数据层就把"真人输入"和"机器注入"分开了**。这种"is real user content" 的区分在 harness 其他位置还出现在哪？是统一的 `isMeta` 标志，还是各个消费方各写一套过滤？
+- `/branch` 在每条 entry 上写 `forkedFrom: {sessionId, messageUuid}`（`branch.ts:128-133`）。有什么消费方在读这个？能不能基于它画一棵分支树？跨多次 fork 的链路能不能追溯到根？
+- `claude -r <sessionId>` resume 跟 branch/fork 的关系：transcript 文件是按 sessionId 命名的（`getTranscriptPathForSession`），resume 时怎么找、isSidechain / sub-agent 的 transcript 怎么分离？sessionStorage.ts:3084 注释说"deduplicate branches in same session" —— branches 的判定逻辑是什么？
+- compact / autocompact 跟 rewind 的耦合：rewind 到 `isCompactSummary` 边界**之前**会怎样？compact summary 是 selectable filter 排掉的，但底层 message 还在 —— rewind 选不到它，但 slice 索引能落在它之前吗？
+- `file_checkpointing` 跟 rewind 的耦合（`fileHistory.ts:347` `fileHistoryRewind` + `supportedSettings.ts:72`）：文件回滚是 best-effort 还是事务？回滚一半失败时 message array 已经砍了文件却没回退，session 怎么收拾？`tengu_file_history_rewind_restore_file_failed` telemetry 有没有真实数据？
+- 真正的"并行多分支同时跑" CC 不支持 —— `/branch` 是切过去，要并跑得开多个 terminal `claude -r`。这个限制是 UI 层还是底层 session model 限制？sessionStorage 能不能支撑同时 attach 多个 REPL？
 
 ## 推荐我去搞懂的问题
 

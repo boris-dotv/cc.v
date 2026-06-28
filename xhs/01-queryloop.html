@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>queryLoop · CC harness 主循环 · 01</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700;800&display=swap');
+:root{
+  --bg:#F3F1EC;--bg2:#FFFFFF;--bg3:#FAF9F6;--bg4:#EEEBE4;
+  --txt:#141413;--txt2:#5E5D5A;--txt3:#8A8884;--txtf:#B0AEA9;
+  --bdr:rgba(20,20,19,.12);--bdr2:rgba(20,20,19,.06);
+  --amber:#D97706;--amberbg:rgba(217,119,6,.08);--amberbr:rgba(217,119,6,.25);
+  --moss:#4D7C0F;--mossbg:rgba(77,124,15,.08);--mossbr:rgba(77,124,15,.25);
+  --blue:#2563EB;--bluebg:rgba(37,99,235,.07);--bluebr:rgba(37,99,235,.22);
+  --terra:#9F1239;--terrabg:rgba(159,18,57,.07);--terrabr:rgba(159,18,57,.22);
+  --violet:#6D28D9;--violetbg:rgba(109,40,217,.06);--violetbr:rgba(109,40,217,.22);
+  --teal:#0E7490;--tealbg:rgba(14,116,144,.07);--tealbr:rgba(14,116,144,.22);
+  --pink:#DB2777;--pinkbg:rgba(219,39,119,.06);--pinkbr:rgba(219,39,119,.22);
+  --slate:#475569;--slatebg:rgba(71,85,105,.07);--slatebr:rgba(71,85,105,.22);
+  --serif:'Playfair Display',Georgia,serif;
+  --sans:'Inter','PingFang SC','Hiragino Sans GB','Microsoft YaHei',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:rgba(20,20,19,.2);border-radius:4px}
+.pg{max-width:880px;margin:0 auto;padding:48px 32px 80px}
+
+/* ───── 1. Cover · 灵魂等式 ───── */
+.cover{padding:36px 0 44px;text-align:center;border-bottom:1px solid var(--bdr);margin-bottom:48px}
+.cover .eyebrow{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--violet);letter-spacing:.22em;text-transform:uppercase;margin-bottom:18px}
+.cover h1{font-family:var(--serif);font-size:46px;font-weight:700;color:var(--txt);letter-spacing:-.03em;line-height:1.1;margin-bottom:8px}
+.cover h1 code{font-family:var(--mono);font-size:40px;font-weight:600;background:none;padding:0;color:var(--terra)}
+.cover .sub{font-family:var(--sans);font-size:14.5px;color:var(--txt2);line-height:1.7;max-width:560px;margin:0 auto 32px}
+.cover .sub code{font-family:var(--mono);font-size:12.5px;background:var(--bg3);padding:1.5px 7px;border-radius:4px;border:1px solid var(--bdr2);color:var(--txt2)}
+
+/* hero equation */
+.soul-eq{background:var(--bg2);border:1px solid var(--bdr);border-radius:14px;padding:28px 24px;margin:24px 0 18px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.soul-eq .label{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--txt3);letter-spacing:.18em;text-transform:uppercase;margin-bottom:14px}
+.soul-eq .eq{font-family:var(--mono);font-size:18px;font-weight:600;line-height:1.55;color:var(--txt);letter-spacing:-.005em;word-break:break-word}
+.soul-eq .eq .var-q{color:var(--blue);background:var(--bluebg);padding:1px 6px;border-radius:4px;border:1px solid var(--bluebr)}
+.soul-eq .eq .var-a{color:var(--moss);background:var(--mossbg);padding:1px 6px;border-radius:4px;border:1px solid var(--mossbr)}
+.soul-eq .eq .var-t{color:var(--amber);background:var(--amberbg);padding:1px 6px;border-radius:4px;border:1px solid var(--amberbr)}
+.soul-eq .legend{display:flex;justify-content:center;gap:24px;margin-top:18px;font-family:var(--mono);font-size:11.5px;color:var(--txt2);flex-wrap:wrap}
+.soul-eq .legend span{display:inline-flex;align-items:center;gap:6px}
+.soul-eq .legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.soul-eq .desc{font-family:var(--sans);font-size:13.5px;color:var(--txt2);margin-top:18px;line-height:1.65}
+.soul-eq .desc strong{color:var(--violet);font-weight:600}
+
+/* stats strip */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:24px;border:1px solid var(--bdr2);border-radius:10px;overflow:hidden;background:var(--bg3)}
+.stats .cell{padding:16px 12px;border-right:1px solid var(--bdr2);text-align:center}
+.stats .cell:last-child{border-right:none}
+.stats .num{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--txt);line-height:1.15}
+.stats .lbl{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--txt2);margin-top:4px;letter-spacing:.04em;text-transform:uppercase}
+.stats .sub{font-size:10px;color:var(--txt3);margin-top:3px;line-height:1.45}
+
+/* ───── Section frame ───── */
+.SEC{margin:0 0 48px}
+.SEC > h2{font-family:var(--serif);font-size:26px;font-weight:700;color:var(--txt);margin-bottom:6px;letter-spacing:-.015em;line-height:1.2}
+.SEC > h2 .ord{font-family:var(--mono);font-size:13px;color:var(--violet);font-weight:700;letter-spacing:.1em;margin-right:10px;vertical-align:middle}
+.SEC > .lead{font-family:var(--sans);font-size:14.5px;color:var(--txt2);margin-bottom:22px;line-height:1.65}
+.SEC > .lead code{font-family:var(--mono);font-size:12.5px;background:var(--bg3);padding:1px 6px;border-radius:4px;border:1px solid var(--bdr2);color:var(--terra)}
+.SEC > .tail{font-family:var(--sans);font-size:13.5px;color:var(--txt2);margin-top:18px;line-height:1.7}
+.SEC > .tail code{font-family:var(--mono);font-size:12px;background:var(--bg3);padding:1px 5px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra)}
+.SEC > .tail strong{color:var(--txt);font-weight:600}
+
+/* ───── 2. 节拍器 SVG ───── */
+.beat-wrap{background:var(--bg2);border:1px solid var(--bdr);border-radius:14px;padding:28px 16px 22px;box-shadow:0 1px 4px rgba(0,0,0,.04);overflow-x:auto}
+.beat-wrap svg{width:100%;height:auto;min-width:540px;display:block}
+.beat-notes{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:20px}
+.beat-note{font-family:var(--sans);font-size:13px;color:var(--txt2);line-height:1.6;padding:12px 14px;border-radius:8px;background:var(--bg3);border:1px solid var(--bdr2)}
+.beat-note b{font-family:var(--mono);font-weight:700;color:var(--moss);margin-right:6px}
+.beat-note.hot b{color:var(--amber)}
+.beat-note code{font-family:var(--mono);font-size:11.5px;background:var(--bg2);padding:0 5px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra)}
+
+/* ───── 3. immutable vs mutable ───── */
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.cmp .col{border:1px solid var(--bdr);border-radius:14px;padding:22px 18px;background:var(--bg2);box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.cmp .col.cold{background:linear-gradient(180deg,rgba(37,99,235,.04),var(--bg2) 30%)}
+.cmp .col.warm{background:linear-gradient(180deg,rgba(217,119,6,.04),var(--bg2) 30%)}
+.cmp .col h3{display:flex;align-items:center;gap:10px;font-family:var(--serif);font-size:18px;font-weight:700;margin-bottom:4px;letter-spacing:-.01em}
+.cmp .col.cold h3{color:var(--blue)}
+.cmp .col.warm h3{color:var(--amber)}
+.cmp .col h3 .ico{width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;flex-shrink:0}
+.cmp .col.cold h3 .ico{background:var(--bluebg);border:1px solid var(--bluebr)}
+.cmp .col.warm h3 .ico{background:var(--amberbg);border:1px solid var(--amberbr)}
+.cmp .col .cnt{font-family:var(--mono);font-size:11px;color:var(--txt3);margin-bottom:14px;letter-spacing:.06em}
+.cmp ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+.cmp ul li{font-family:var(--mono);font-size:11.5px;line-height:1.5;padding:9px 11px;border-radius:6px;background:var(--bg3);border:1px solid var(--bdr2);color:var(--txt2)}
+.cmp ul li b{font-family:var(--mono);font-weight:700;color:var(--txt);display:block;margin-bottom:2px;font-size:12px}
+.cmp ul li.hot b{color:var(--terra)}
+.cmp-tail{margin-top:18px;padding:14px 18px;background:var(--violetbg);border:1px solid var(--violetbr);border-radius:10px;font-family:var(--sans);font-size:13px;color:var(--txt2);line-height:1.65}
+.cmp-tail strong{color:var(--violet);font-weight:600}
+
+/* ───── 4. ping-pong 累积 ───── */
+.pp{background:var(--bg2);border:1px solid var(--bdr);border-radius:14px;padding:24px 22px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.pp .row{display:grid;grid-template-columns:80px 1fr 60px;gap:14px;align-items:center;margin-bottom:10px}
+.pp .row:last-child{margin-bottom:0}
+.pp .turn{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--txt2);letter-spacing:.04em}
+.pp .turn b{display:block;font-size:14px;color:var(--txt);font-weight:700;font-family:var(--serif)}
+.pp .bars{display:flex;gap:4px;flex-wrap:wrap}
+.pp .blk{height:28px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;font-weight:700;color:#fff;letter-spacing:.02em;padding:0 9px;min-width:60px}
+.pp .blk.u{background:var(--blue)}
+.pp .blk.a{background:var(--moss)}
+.pp .blk.t{background:var(--amber)}
+.pp .blk.dots{background:transparent;color:var(--txt3);border:1px dashed var(--bdr);min-width:40px}
+.pp .delta{font-family:var(--mono);font-size:11px;color:var(--moss);font-weight:600;text-align:right}
+.pp .delta.zero{color:var(--txt3)}
+.pp-legend{display:flex;gap:18px;margin-top:18px;padding-top:16px;border-top:1px solid var(--bdr2);font-family:var(--mono);font-size:11.5px;color:var(--txt2);flex-wrap:wrap}
+.pp-legend span{display:inline-flex;align-items:center;gap:6px}
+.pp-legend i{width:14px;height:14px;border-radius:3px;display:inline-block}
+.pp-tail{margin-top:16px;padding:14px 18px;background:var(--mossbg);border:1px solid var(--mossbr);border-radius:10px;font-family:var(--sans);font-size:13px;color:var(--txt2);line-height:1.65}
+.pp-tail strong{color:var(--moss);font-weight:600}
+
+/* ───── 5. 流循环体 3 职责 ───── */
+.duty{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.duty .card{background:var(--bg2);border:1px solid var(--bdr);border-radius:14px;padding:22px 18px;box-shadow:0 1px 4px rgba(0,0,0,.04);text-align:center}
+.duty .ico-wrap{width:64px;height:64px;margin:0 auto 14px;border-radius:16px;display:flex;align-items:center;justify-content:center}
+.duty .card.k1 .ico-wrap{background:var(--terrabg);border:1.5px solid var(--terrabr)}
+.duty .card.k2 .ico-wrap{background:var(--tealbg);border:1.5px solid var(--tealbr)}
+.duty .card.k3 .ico-wrap{background:var(--mossbg);border:1.5px solid var(--mossbr)}
+.duty .ico-wrap svg{width:34px;height:34px}
+.duty .num{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin-bottom:6px}
+.duty .card.k1 .num{color:var(--terra)}
+.duty .card.k2 .num{color:var(--teal)}
+.duty .card.k3 .num{color:var(--moss)}
+.duty h3{font-family:var(--serif);font-size:18px;font-weight:700;color:var(--txt);margin-bottom:10px;letter-spacing:-.01em;line-height:1.25}
+.duty p{font-family:var(--sans);font-size:13px;color:var(--txt2);line-height:1.6;text-align:left}
+.duty p code{font-family:var(--mono);font-size:11px;background:var(--bg3);padding:1px 5px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra)}
+.duty p strong{color:var(--txt);font-weight:600}
+.duty-tail{margin-top:18px;padding:14px 18px;background:var(--tealbg);border:1px solid var(--tealbr);border-radius:10px;font-family:var(--sans);font-size:13px;color:var(--txt2);line-height:1.65}
+.duty-tail strong{color:var(--teal);font-weight:600}
+
+/* ───── 6. 决策树 ───── */
+.tree-wrap{background:var(--bg2);border:1px solid var(--bdr);border-radius:14px;padding:28px 18px 22px;box-shadow:0 1px 4px rgba(0,0,0,.04);overflow-x:auto}
+.tree-wrap svg{width:100%;height:auto;min-width:540px;display:block}
+.tree-legend{display:flex;justify-content:center;gap:16px;margin-top:14px;font-family:var(--mono);font-size:11px;color:var(--txt2);flex-wrap:wrap}
+.tree-legend span{display:inline-flex;align-items:center;gap:6px}
+.tree-legend i{width:14px;height:10px;border-radius:2px;display:inline-block}
+
+/* ───── 7. fallback ───── */
+.fb-wrap{background:var(--bg2);border:1px solid var(--bdr);border-radius:14px;padding:28px 18px 18px;box-shadow:0 1px 4px rgba(0,0,0,.04);overflow-x:auto}
+.fb-wrap svg{width:100%;height:auto;min-width:540px;display:block}
+.fb-steps{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:18px}
+.fb-step{padding:12px 10px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:8px;font-family:var(--sans);font-size:11.5px;color:var(--txt2);line-height:1.5;text-align:center}
+.fb-step .n{display:block;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--amber);letter-spacing:.1em;margin-bottom:4px}
+.fb-step b{display:block;color:var(--txt);font-family:var(--sans);font-weight:600;font-size:12px;margin-bottom:3px}
+.fb-step code{font-family:var(--mono);font-size:10px;color:var(--terra);background:var(--bg2);padding:0 4px;border-radius:3px;border:1px solid var(--bdr2)}
+
+/* ───── 8. Terminal 卡牌墙 ───── */
+.term{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.term .t{padding:16px 14px;border-radius:10px;background:var(--bg2);border:1px solid var(--bdr);box-shadow:0 1px 3px rgba(0,0,0,.03);position:relative;overflow:hidden}
+.term .t::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px}
+.term .t.ok::before{background:var(--moss)}
+.term .t.warn::before{background:var(--amber)}
+.term .t.err::before{background:var(--terra)}
+.term .t.gray::before{background:var(--slate)}
+.term .t.hook::before{background:var(--violet)}
+.term .nm{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--txt);margin-bottom:6px;line-height:1.3;word-break:break-all}
+.term .ds{font-family:var(--sans);font-size:11.5px;color:var(--txt2);line-height:1.55}
+.term .tg{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-top:8px;display:inline-block;padding:1.5px 6px;border-radius:3px}
+.term .t.ok .tg{background:var(--mossbg);color:var(--moss);border:1px solid var(--mossbr)}
+.term .t.warn .tg{background:var(--amberbg);color:var(--amber);border:1px solid var(--amberbr)}
+.term .t.err .tg{background:var(--terrabg);color:var(--terra);border:1px solid var(--terrabr)}
+.term .t.gray .tg{background:var(--slatebg);color:var(--slate);border:1px solid var(--slatebr)}
+.term .t.hook .tg{background:var(--violetbg);color:var(--violet);border:1px solid var(--violetbr)}
+
+/* ───── footer ───── */
+.foot{text-align:center;padding:36px 0 8px;color:var(--txt3);font-family:var(--mono);font-size:11px;line-height:1.8;border-top:1px solid var(--bdr2);margin-top:24px}
+.foot a{color:var(--txt2);text-decoration:none;border-bottom:1px solid var(--bdr2)}
+.foot a:hover{color:var(--txt);border-color:var(--txt2)}
+.foot .sig{font-family:var(--serif);font-size:14px;color:var(--txt2);margin-bottom:6px;letter-spacing:.02em}
+
+/* ───── Mobile ───── */
+@media(max-width:760px){
+  .pg{padding:32px 18px 60px}
+  .cover{padding:20px 0 32px;margin-bottom:32px}
+  .cover h1{font-size:32px}
+  .cover h1 code{font-size:28px}
+  .cover .sub{font-size:13px}
+  .soul-eq{padding:20px 16px}
+  .soul-eq .eq{font-size:14px}
+  .soul-eq .legend{gap:14px;font-size:10.5px}
+  .stats{grid-template-columns:1fr 1fr}
+  .stats .cell:nth-child(2){border-right:none}
+  .stats .cell:nth-child(3),.stats .cell:nth-child(4){border-top:1px solid var(--bdr2)}
+  .SEC{margin-bottom:36px}
+  .SEC > h2{font-size:21px}
+  .SEC > .lead{font-size:13.5px}
+  .beat-wrap{padding:18px 8px 14px}
+  .beat-notes{grid-template-columns:1fr}
+  .cmp{grid-template-columns:1fr;gap:12px}
+  .cmp .col{padding:18px 14px}
+  .pp{padding:18px 14px}
+  .pp .row{grid-template-columns:64px 1fr 44px;gap:10px}
+  .pp .blk{font-size:9px;padding:0 6px;min-width:48px;height:24px}
+  .duty{grid-template-columns:1fr;gap:12px}
+  .duty .ico-wrap{width:56px;height:56px}
+  .tree-wrap{padding:18px 8px 14px}
+  .fb-wrap{padding:18px 8px 14px}
+  .fb-steps{grid-template-columns:1fr 1fr;gap:8px}
+  .term{grid-template-columns:1fr 1fr;gap:8px}
+  .term .t{padding:14px 12px}
+}
+</style>
+</head>
+<body>
+<div class="pg">
+
+<!-- ═══════════════════ 1. COVER · 灵魂等式 ═══════════════════ -->
+<div class="cover">
+  <div class="eyebrow">CC 源码探索 · 01</div>
+  <h1><code>queryLoop</code><br>CC harness 主循环</h1>
+  <div class="sub">
+    <code>src/query.ts</code> 1729 行 · 只看主干，不看肉<br>
+    所有 tool-using agent 都绕不开这个形状
+  </div>
+
+  <div class="soul-eq">
+    <div class="label">下一轮 messages 的灵魂等式</div>
+    <div class="eq">messages = [<br>
+      &nbsp;&nbsp;...<span class="var-q">messagesForQuery</span>,<br>
+      &nbsp;&nbsp;...<span class="var-a">assistantMessages</span>,<br>
+      &nbsp;&nbsp;...<span class="var-t">toolResults</span><br>
+    ]</div>
+    <div class="legend">
+      <span><i style="background:var(--blue)"></i> 这一轮喂 API 的输入</span>
+      <span><i style="background:var(--moss)"></i> assistant 流式回复</span>
+      <span><i style="background:var(--amber)"></i> 工具执行结果</span>
+    </div>
+    <div class="desc">每一轮结束 → 把这三段拼起来 → 当作下一轮的输入再喂回去。<strong>这就是 ping-pong 累积</strong>，是整个 agent harness 的灵魂结构。</div>
+  </div>
+
+  <div class="stats">
+    <div class="cell"><div class="num">1729</div><div class="lbl">总行数</div><div class="sub">src/query.ts</div></div>
+    <div class="cell"><div class="num">9</div><div class="lbl">while 步骤</div><div class="sub">每轮节拍</div></div>
+    <div class="cell"><div class="num">~50</div><div class="lbl">流循环体</div><div class="sub">最值得细读</div></div>
+    <div class="cell"><div class="num">10</div><div class="lbl">Terminal</div><div class="sub">所有出口</div></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 2. 9 步节拍器 ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="ord">02</span>while (true) 的 9 拍</h2>
+  <p class="lead">跳过所有 <code>feature()</code> gate 的策略层，只看骨架。④⑥⑧ 是热点（流循环体 / runTools / state 重组）。</p>
+
+  <div class="beat-wrap">
+    <svg viewBox="0 0 900 240" xmlns="http://www.w3.org/2000/svg">
+      <!-- main horizontal axis -->
+      <line x1="60" y1="100" x2="840" y2="100" stroke="#B0AEA9" stroke-width="1.5" stroke-dasharray="3,3"/>
+
+      <!-- loop back arrow ⑨ → ① -->
+      <path d="M 840 100 C 880 160, 880 200, 450 215 C 20 200, 20 160, 60 100"
+            stroke="#D97706" stroke-width="1.5" fill="none" stroke-dasharray="4,3" opacity=".7"/>
+      <text x="450" y="232" font-family="IBM Plex Mono" font-size="10.5" fill="#D97706" text-anchor="middle" font-weight="600">continue ↩ 回到 while 顶</text>
+
+      <!-- 9 nodes -->
+      <!-- ① destructure -->
+      <g><circle cx="60" cy="100" r="14" fill="#FFFFFF" stroke="#4D7C0F" stroke-width="2"/>
+        <text x="60" y="105" font-family="IBM Plex Mono" font-size="12" fill="#4D7C0F" text-anchor="middle" font-weight="700">①</text>
+        <text x="60" y="58" font-family="Inter" font-size="11" fill="#141413" text-anchor="middle" font-weight="600">destructure</text>
+        <text x="60" y="74" font-family="IBM Plex Mono" font-size="9.5" fill="#5E5D5A" text-anchor="middle">state</text>
+        <text x="60" y="138" font-family="IBM Plex Mono" font-size="9.5" fill="#8A8884" text-anchor="middle">turn 顶</text>
+      </g>
+
+      <!-- ② yield request_start -->
+      <g><circle cx="155" cy="100" r="14" fill="#FFFFFF" stroke="#4D7C0F" stroke-width="2"/>
+        <text x="155" y="105" font-family="IBM Plex Mono" font-size="12" fill="#4D7C0F" text-anchor="middle" font-weight="700">②</text>
+        <text x="155" y="58" font-family="Inter" font-size="11" fill="#141413" text-anchor="middle" font-weight="600">yield</text>
+        <text x="155" y="74" font-family="IBM Plex Mono" font-size="9.5" fill="#5E5D5A" text-anchor="middle">request_start</text>
+      </g>
+
+      <!-- ③ messages 改造 -->
+      <g><circle cx="250" cy="100" r="14" fill="#FFFFFF" stroke="#4D7C0F" stroke-width="2"/>
+        <text x="250" y="105" font-family="IBM Plex Mono" font-size="12" fill="#4D7C0F" text-anchor="middle" font-weight="700">③</text>
+        <text x="250" y="58" font-family="Inter" font-size="11" fill="#141413" text-anchor="middle" font-weight="600">messages 改造</text>
+        <text x="250" y="74" font-family="IBM Plex Mono" font-size="9.5" fill="#5E5D5A" text-anchor="middle">→ messagesForQuery</text>
+      </g>
+
+      <!-- ④ 流循环体 (HOT) -->
+      <g><circle cx="360" cy="100" r="22" fill="#D97706" stroke="#D97706" stroke-width="2"/>
+        <text x="360" y="106" font-family="IBM Plex Mono" font-size="15" fill="#FFFFFF" text-anchor="middle" font-weight="700">④</text>
+        <text x="360" y="48" font-family="Inter" font-size="12" fill="#D97706" text-anchor="middle" font-weight="700">流循环体</text>
+        <text x="360" y="64" font-family="IBM Plex Mono" font-size="10" fill="#D97706" text-anchor="middle" font-weight="600">for await msg</text>
+        <text x="360" y="148" font-family="IBM Plex Mono" font-size="9.5" fill="#D97706" text-anchor="middle" font-weight="600">3 职责 · 50 行</text>
+      </g>
+
+      <!-- ⑤ exit check -->
+      <g><circle cx="460" cy="100" r="14" fill="#FFFFFF" stroke="#4D7C0F" stroke-width="2"/>
+        <text x="460" y="105" font-family="IBM Plex Mono" font-size="12" fill="#4D7C0F" text-anchor="middle" font-weight="700">⑤</text>
+        <text x="460" y="58" font-family="Inter" font-size="11" fill="#141413" text-anchor="middle" font-weight="600">if !needsFollowUp</text>
+        <text x="460" y="74" font-family="IBM Plex Mono" font-size="9.5" fill="#5E5D5A" text-anchor="middle">→ 决策树</text>
+      </g>
+
+      <!-- ⑥ runTools (HOT) -->
+      <g><circle cx="560" cy="100" r="22" fill="#0E7490" stroke="#0E7490" stroke-width="2"/>
+        <text x="560" y="106" font-family="IBM Plex Mono" font-size="15" fill="#FFFFFF" text-anchor="middle" font-weight="700">⑥</text>
+        <text x="560" y="48" font-family="Inter" font-size="12" fill="#0E7490" text-anchor="middle" font-weight="700">runTools</text>
+        <text x="560" y="64" font-family="IBM Plex Mono" font-size="10" fill="#0E7490" text-anchor="middle" font-weight="600">yield · push results</text>
+      </g>
+
+      <!-- ⑦ attachments / refresh -->
+      <g><circle cx="660" cy="100" r="14" fill="#FFFFFF" stroke="#4D7C0F" stroke-width="2"/>
+        <text x="660" y="105" font-family="IBM Plex Mono" font-size="12" fill="#4D7C0F" text-anchor="middle" font-weight="700">⑦</text>
+        <text x="660" y="58" font-family="Inter" font-size="11" fill="#141413" text-anchor="middle" font-weight="600">attachments</text>
+        <text x="660" y="74" font-family="IBM Plex Mono" font-size="9.5" fill="#5E5D5A" text-anchor="middle">refresh tools</text>
+      </g>
+
+      <!-- ⑧ state 重组 (HOT · 灵魂) -->
+      <g><circle cx="750" cy="100" r="22" fill="#6D28D9" stroke="#6D28D9" stroke-width="2"/>
+        <text x="750" y="106" font-family="IBM Plex Mono" font-size="15" fill="#FFFFFF" text-anchor="middle" font-weight="700">⑧</text>
+        <text x="750" y="48" font-family="Inter" font-size="12" fill="#6D28D9" text-anchor="middle" font-weight="700">state 重组</text>
+        <text x="750" y="64" font-family="IBM Plex Mono" font-size="10" fill="#6D28D9" text-anchor="middle" font-weight="600">灵魂等式</text>
+        <text x="750" y="148" font-family="IBM Plex Mono" font-size="9.5" fill="#6D28D9" text-anchor="middle" font-weight="600">ping-pong 拼接</text>
+      </g>
+
+      <!-- ⑨ continue -->
+      <g><circle cx="840" cy="100" r="14" fill="#FFFFFF" stroke="#D97706" stroke-width="2"/>
+        <text x="840" y="105" font-family="IBM Plex Mono" font-size="12" fill="#D97706" text-anchor="middle" font-weight="700">⑨</text>
+        <text x="840" y="58" font-family="Inter" font-size="11" fill="#141413" text-anchor="middle" font-weight="600">continue</text>
+        <text x="840" y="74" font-family="IBM Plex Mono" font-size="9.5" fill="#5E5D5A" text-anchor="middle">↩ loop</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="beat-notes">
+    <div class="beat-note hot"><b>④</b>每条 stream msg 进来做 3 件事：tombstone / clone &amp; yield / push &amp; 收集 <code>tool_use</code>。这 ~50 行是 harness 跟"模型在说什么"的<strong>唯一</strong>接触点。</div>
+    <div class="beat-note hot"><b>⑥</b>跑工具，<code>yield</code> 透传给消费者，结果 push 进 <code>toolResults</code>。工具上下文可能被 <code>{...spread}</code> 重写。</div>
+    <div class="beat-note hot"><b>⑧</b><code>state = {...}</code> <strong>整体重写</strong>，不是零散改字段。每个 <code>continue</code> 站点都是一次完整快照。</div>
+    <div class="beat-note"><b>③</b>消息流过 4 道压缩闸门：<code>getMessagesAfterCompactBoundary</code> → <code>applyToolResultBudget</code> → <code>microcompact</code> → <code>autocompact</code> → 硬阻断检查。</div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 3. immutable vs mutable ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="ord">03</span>不变 / 可变 · 17 个字段</h2>
+  <p class="lead">queryLoop 的状态空间分两半 —— 一边由用户输入决定，整个查询冻死；一边由 ping-pong 推动，每轮整体重写。</p>
+
+  <div class="cmp">
+    <!-- 冷栏 immutable -->
+    <div class="col cold">
+      <h3><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>immutable · 冻土</h3>
+      <div class="cnt">8 fields · 查询生命周期不变</div>
+      <ul>
+        <li class="hot"><b>systemPrompt</b>整段 "You are Claude Code..." 加 tool 定义</li>
+        <li><b>userContext</b>每条 user 前置的 <code>&lt;system-reminder&gt;</code> meta</li>
+        <li><b>systemContext</b>每条 system 附加的 git status / CLAUDE.md</li>
+        <li><b>canUseTool</b>决定 tool 是否被允许的函数</li>
+        <li><b>fallbackModel</b>opus → sonnet 的备份</li>
+        <li><b>querySource</b><code>repl_main_thread</code> / <code>agent:Explore</code> / <code>compact</code></li>
+        <li><b>maxTurns</b>SDK 硬上限（如 50）</li>
+        <li><b>skipCacheWrite</b>不污染父 agent 的 prompt cache</li>
+      </ul>
+    </div>
+
+    <!-- 暖栏 mutable -->
+    <div class="col warm">
+      <h3><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M3 18c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M3 6c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/></svg></span>mutable · 河流</h3>
+      <div class="cnt">9 fields · 每轮 state = {...} 重写</div>
+      <ul>
+        <li class="hot"><b>messages</b>turn1 [u] → turn2 [u,a,t] → ... 每轮递增</li>
+        <li><b>toolUseContext</b>queryTracking / readFileState / abortController</li>
+        <li><b>turnCount</b>1 → 2 → 3 ...</li>
+        <li><b>transition</b><code>{reason: 'next_turn' / ...}</code> telemetry</li>
+        <li><b>autoCompactTracking</b>距上次 compact 多少轮</li>
+        <li><b>maxOutputTokensOverride</b>8k 被截 → 升 64k 重发</li>
+        <li><b>maxOutputTokensRecoveryCount</b>0 → 1 → 2，超 limit 放弃</li>
+        <li><b>hasAttemptedReactiveCompact</b>turn 内一次性闸门</li>
+        <li><b>pendingToolUseSummary</b>haiku 异步生成的摘要 Promise</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="cmp-tail">
+    <strong>let / const 信号：</strong>destructure 时 <code style="font-family:var(--mono);color:var(--violet);background:none;border:none;padding:0">let { toolUseContext }</code>、其余全 <code style="font-family:var(--mono);color:var(--violet);background:none;border:none;padding:0">const</code> —— 明确告诉你"轮内只有 toolUseContext 会被原地改写"。改 immutable 任何一个 → 破 cache 或跳语义。
+  </div>
+</div>
+
+<!-- ═══════════════════ 4. ping-pong 累积 ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="ord">04</span>messages 怎么长大</h2>
+  <p class="lead">每个 turn 结束，messages 数组只增不减 —— assistant 回复 + tool_result 全部 push 进去，下一轮再整段喂回 API。直到 compact 触发才会重写。</p>
+
+  <div class="pp">
+    <div class="row">
+      <div class="turn"><b>turn 1</b>start</div>
+      <div class="bars">
+        <div class="blk u">user</div>
+      </div>
+      <div class="delta zero">+0</div>
+    </div>
+    <div class="row">
+      <div class="turn"><b>turn 2</b></div>
+      <div class="bars">
+        <div class="blk u">user</div>
+        <div class="blk a">assistant</div>
+        <div class="blk t">tool_result</div>
+      </div>
+      <div class="delta">+2</div>
+    </div>
+    <div class="row">
+      <div class="turn"><b>turn 3</b></div>
+      <div class="bars">
+        <div class="blk u">user</div>
+        <div class="blk a">assistant</div>
+        <div class="blk t">tool_result</div>
+        <div class="blk a">assistant</div>
+        <div class="blk t">tool_result</div>
+      </div>
+      <div class="delta">+2</div>
+    </div>
+    <div class="row">
+      <div class="turn"><b>turn 4</b></div>
+      <div class="bars">
+        <div class="blk u">user</div>
+        <div class="blk a">assistant</div>
+        <div class="blk t">tool_result</div>
+        <div class="blk a">assistant</div>
+        <div class="blk t">tool_result</div>
+        <div class="blk a">assistant</div>
+        <div class="blk t">tool_result</div>
+      </div>
+      <div class="delta">+2</div>
+    </div>
+    <div class="row">
+      <div class="turn"><b>turn N</b>...</div>
+      <div class="bars">
+        <div class="blk u">user</div>
+        <div class="blk a">a</div>
+        <div class="blk t">t</div>
+        <div class="blk a">a</div>
+        <div class="blk t">t</div>
+        <div class="blk a">a</div>
+        <div class="blk t">t</div>
+        <div class="blk dots">...</div>
+      </div>
+      <div class="delta">+2N</div>
+    </div>
+
+    <div class="pp-legend">
+      <span><i style="background:var(--blue)"></i> user / messagesForQuery</span>
+      <span><i style="background:var(--moss)"></i> assistant</span>
+      <span><i style="background:var(--amber)"></i> tool_result</span>
+    </div>
+  </div>
+
+  <div class="pp-tail">
+    <strong>不变量：</strong>每轮新增 = 1 个 assistant + 1 个 tool_result（如果有工具调用），<strong>永不删</strong>。一直长到上下文压力触发 <code style="font-family:var(--mono);color:var(--moss);background:none;border:none;padding:0">microcompact</code> / <code style="font-family:var(--mono);color:var(--moss);background:none;border:none;padding:0">autocompact</code> 才会重写。这是 token 消耗永远在涨的根本原因。
+  </div>
+</div>
+
+<!-- ═══════════════════ 5. 流循环体 3 职责 ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="ord">05</span>流循环体 · 50 行做 3 件事</h2>
+  <p class="lead">代码里用 <code>⭐ START</code> / <code>⭐ END</code> 注释包住的那 50 行 —— 是 harness 跟 stream 协议固化耦合的<strong>唯一</strong>位置。每条 stream message 进来都过这三道。</p>
+
+  <div class="duty">
+    <div class="card k1">
+      <div class="ico-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#9F1239" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9"/>
+          <path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2H3V8z"/>
+          <line x1="10" y1="13" x2="14" y2="13"/>
+        </svg>
+      </div>
+      <div class="num">① Tombstone</div>
+      <h3>是否要"墓碑"已经 yield 的内容？</h3>
+      <p>fallback 触发过 → 之前累积的 assistant message 全作废 —— 清空 <code>assistantMessages</code>/<code>toolResults</code>/<code>toolUseBlocks</code>，<strong>给已经 yield 出去的 tool_use 补 tombstone</strong> 让 UI 划掉。</p>
+    </div>
+    <div class="card k2">
+      <div class="ico-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#0E7490" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="6" width="8" height="12" rx="1.5"/>
+          <rect x="14" y="6" width="8" height="12" rx="1.5"/>
+          <path d="M10 12h4M12 10l2 2-2 2"/>
+        </svg>
+      </div>
+      <div class="num">② Clone &amp; Yield</div>
+      <h3>对外那份要 clone 再改</h3>
+      <p><code>tool_use</code> 块要 backfill 派生字段（如 file path 展开），<strong>但只 clone 给"对外 yield 的那份"，原始 message 不动</strong>。原因：原始要回灌 API，mutate 会破 byte-level prompt cache。</p>
+    </div>
+    <div class="card k3">
+      <div class="ico-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#4D7C0F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="14" width="16" height="6" rx="1"/>
+          <rect x="4" y="6" width="16" height="6" rx="1" opacity=".4"/>
+          <path d="M12 2v4M10 4l2-2 2 2"/>
+        </svg>
+      </div>
+      <div class="num">③ Push &amp; 收集</div>
+      <h3>tool_use 是"再来一轮"的唯一信号</h3>
+      <p><code>message.type === 'assistant'</code> → push 到 <code>assistantMessages</code>，扫 content 收集 <code>tool_use</code> 块。<strong>任何 tool_use 出现就置 <code>needsFollowUp = true</code></strong> —— 这是决策树的入口。</p>
+    </div>
+  </div>
+
+  <div class="duty-tail">
+    <strong>为什么这 50 行最重要：</strong>一份 message 在这里被分成 3 个去向 —— ① yield 给消费者（UI 用，可改）、② push 到 <code style="font-family:var(--mono);color:var(--teal);background:none;border:none;padding:0">assistantMessages</code>（要回灌 API，不可改）、③ 喂给 streamingToolExecutor。每个去向对消息的要求不同，这就是 backfill clone 那套绕弯的根本原因。
+  </div>
+</div>
+
+<!-- ═══════════════════ 6. 流后决策树 ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="ord">06</span>流读完了 · return 还是 continue?</h2>
+  <p class="lead">stream 耗尽后，照 <code>needsFollowUp</code> 二分。每个 <code>continue</code> 都是把 state 整体重写一次后跳回 while 顶。</p>
+
+  <div class="tree-wrap">
+    <svg viewBox="0 0 880 520" xmlns="http://www.w3.org/2000/svg">
+      <!-- defs -->
+      <defs>
+        <marker id="arr-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#4D7C0F"/>
+        </marker>
+        <marker id="arr-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#9F1239"/>
+        </marker>
+        <marker id="arr-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#D97706"/>
+        </marker>
+      </defs>
+
+      <!-- TOP: stream 读完 -->
+      <rect x="350" y="14" width="180" height="40" rx="8" fill="#FAF9F6" stroke="#141413" stroke-width="1.5"/>
+      <text x="440" y="39" font-family="Inter" font-size="13" fill="#141413" text-anchor="middle" font-weight="700">stream 读完</text>
+
+      <!-- Diamond 1: aborted? -->
+      <line x1="440" y1="54" x2="440" y2="78" stroke="#141413" stroke-width="1.5"/>
+      <polygon points="440,80 530,115 440,150 350,115" fill="#FFFFFF" stroke="#141413" stroke-width="1.5"/>
+      <text x="440" y="111" font-family="IBM Plex Mono" font-size="11" fill="#141413" text-anchor="middle" font-weight="600">aborted?</text>
+      <text x="440" y="125" font-family="IBM Plex Mono" font-size="9.5" fill="#5E5D5A" text-anchor="middle">signal.aborted</text>
+
+      <!-- Right: aborted true -> err -->
+      <line x1="530" y1="115" x2="660" y2="115" stroke="#9F1239" stroke-width="1.5" marker-end="url(#arr-r)"/>
+      <text x="592" y="108" font-family="IBM Plex Mono" font-size="10" fill="#9F1239" text-anchor="middle" font-weight="700">yes</text>
+      <rect x="665" y="95" width="200" height="40" rx="8" fill="#FFF5F7" stroke="#9F1239" stroke-width="1.5"/>
+      <text x="765" y="113" font-family="IBM Plex Mono" font-size="11" fill="#9F1239" text-anchor="middle" font-weight="700">return</text>
+      <text x="765" y="127" font-family="IBM Plex Mono" font-size="10.5" fill="#9F1239" text-anchor="middle" font-weight="600">'aborted_streaming'</text>
+
+      <!-- Down: aborted false -->
+      <line x1="440" y1="150" x2="440" y2="174" stroke="#141413" stroke-width="1.5"/>
+      <text x="455" y="166" font-family="IBM Plex Mono" font-size="10" fill="#141413" font-weight="600">no</text>
+
+      <!-- Diamond 2: needsFollowUp? -->
+      <polygon points="440,176 540,216 440,256 340,216" fill="#FFFFFF" stroke="#141413" stroke-width="1.5"/>
+      <text x="440" y="212" font-family="IBM Plex Mono" font-size="11" fill="#141413" text-anchor="middle" font-weight="600">needsFollowUp?</text>
+      <text x="440" y="226" font-family="IBM Plex Mono" font-size="9.5" fill="#5E5D5A" text-anchor="middle">(有 tool_use?)</text>
+
+      <!-- Right: needsFollowUp true -> runTools -->
+      <line x1="540" y1="216" x2="660" y2="216" stroke="#4D7C0F" stroke-width="1.5" marker-end="url(#arr-g)"/>
+      <text x="600" y="209" font-family="IBM Plex Mono" font-size="10" fill="#4D7C0F" text-anchor="middle" font-weight="700">yes</text>
+      <rect x="665" y="196" width="200" height="40" rx="8" fill="#F5FAEC" stroke="#4D7C0F" stroke-width="1.5"/>
+      <text x="765" y="214" font-family="IBM Plex Mono" font-size="11" fill="#4D7C0F" text-anchor="middle" font-weight="700">→ runTools</text>
+      <text x="765" y="228" font-family="IBM Plex Mono" font-size="10" fill="#4D7C0F" text-anchor="middle">⑥ 跑工具 → continue</text>
+
+      <!-- Down: needsFollowUp false -> errors check -->
+      <line x1="440" y1="256" x2="440" y2="280" stroke="#141413" stroke-width="1.5"/>
+      <text x="455" y="272" font-family="IBM Plex Mono" font-size="10" fill="#141413" font-weight="600">no</text>
+
+      <!-- Diamond 3: withheld error? -->
+      <polygon points="440,282 540,322 440,362 340,322" fill="#FFFBF0" stroke="#D97706" stroke-width="1.5"/>
+      <text x="440" y="318" font-family="IBM Plex Mono" font-size="11" fill="#D97706" text-anchor="middle" font-weight="700">withheld error?</text>
+      <text x="440" y="332" font-family="IBM Plex Mono" font-size="9.5" fill="#D97706" text-anchor="middle">prompt_too_long /</text>
+      <text x="440" y="344" font-family="IBM Plex Mono" font-size="9.5" fill="#D97706" text-anchor="middle">max_output_tokens</text>
+
+      <!-- Right: recover -->
+      <line x1="540" y1="322" x2="660" y2="322" stroke="#D97706" stroke-width="1.5" marker-end="url(#arr-a)"/>
+      <text x="600" y="315" font-family="IBM Plex Mono" font-size="10" fill="#D97706" text-anchor="middle" font-weight="700">yes</text>
+      <rect x="665" y="290" width="200" height="62" rx="8" fill="#FFFBF0" stroke="#D97706" stroke-width="1.5"/>
+      <text x="765" y="308" font-family="Inter" font-size="11" fill="#D97706" text-anchor="middle" font-weight="700">恢复路径</text>
+      <text x="765" y="324" font-family="IBM Plex Mono" font-size="10" fill="#5E5D5A" text-anchor="middle">collapse drain /</text>
+      <text x="765" y="336" font-family="IBM Plex Mono" font-size="10" fill="#5E5D5A" text-anchor="middle">reactive compact /</text>
+      <text x="765" y="348" font-family="IBM Plex Mono" font-size="10" fill="#5E5D5A" text-anchor="middle">升 cap 重发</text>
+
+      <!-- Down: no error -> stop hooks -->
+      <line x1="440" y1="362" x2="440" y2="386" stroke="#141413" stroke-width="1.5"/>
+      <text x="455" y="378" font-family="IBM Plex Mono" font-size="10" fill="#141413" font-weight="600">no</text>
+
+      <!-- Diamond 4: stop hooks -->
+      <polygon points="440,388 540,428 440,468 340,428" fill="#F0F9FF" stroke="#6D28D9" stroke-width="1.5"/>
+      <text x="440" y="424" font-family="IBM Plex Mono" font-size="11" fill="#6D28D9" text-anchor="middle" font-weight="700">stop hook?</text>
+      <text x="440" y="438" font-family="IBM Plex Mono" font-size="9.5" fill="#6D28D9" text-anchor="middle">prevent / inject</text>
+
+      <!-- Right: hook prevent -->
+      <line x1="540" y1="428" x2="660" y2="428" stroke="#6D28D9" stroke-width="1.5" marker-end="url(#arr-a)"/>
+      <text x="600" y="421" font-family="IBM Plex Mono" font-size="10" fill="#6D28D9" text-anchor="middle" font-weight="700">prevent</text>
+      <rect x="665" y="408" width="200" height="40" rx="8" fill="#F0F9FF" stroke="#6D28D9" stroke-width="1.5"/>
+      <text x="765" y="426" font-family="IBM Plex Mono" font-size="11" fill="#6D28D9" text-anchor="middle" font-weight="700">return</text>
+      <text x="765" y="440" font-family="IBM Plex Mono" font-size="10.5" fill="#6D28D9" text-anchor="middle" font-weight="600">'stop_hook_prevented'</text>
+
+      <!-- Down: clean -> completed -->
+      <line x1="440" y1="468" x2="440" y2="488" stroke="#4D7C0F" stroke-width="1.5"/>
+      <text x="460" y="482" font-family="IBM Plex Mono" font-size="10" fill="#4D7C0F" font-weight="600">pass</text>
+
+      <!-- Final: completed -->
+      <rect x="350" y="488" width="180" height="32" rx="8" fill="#F5FAEC" stroke="#4D7C0F" stroke-width="2"/>
+      <text x="440" y="510" font-family="IBM Plex Mono" font-size="12" fill="#4D7C0F" text-anchor="middle" font-weight="700">return 'completed' ✓</text>
+    </svg>
+  </div>
+
+  <div class="tree-legend">
+    <span><i style="background:#4D7C0F"></i> happy path</span>
+    <span><i style="background:#D97706"></i> 恢复路径</span>
+    <span><i style="background:#6D28D9"></i> hook 路径</span>
+    <span><i style="background:#9F1239"></i> 错误 return</span>
+  </div>
+</div>
+
+<!-- ═══════════════════ 7. fallback ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="ord">07</span>fallback · 主道翻车切备道</h2>
+  <p class="lead">API 返回 529 overloaded → SDK 抛 <code>FallbackTriggeredError</code> → catch 接住做 5 件事，然后外层 while 转一圈用 sonnet 重发。</p>
+
+  <div class="fb-wrap">
+    <svg viewBox="0 0 880 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr-fb-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#D97706"/>
+        </marker>
+      </defs>
+
+      <!-- 主道 opus -->
+      <rect x="40" y="60" width="800" height="40" rx="20" fill="#EFF6FF" stroke="#2563EB" stroke-width="1.5"/>
+      <text x="68" y="86" font-family="IBM Plex Mono" font-size="12" fill="#2563EB" font-weight="700">opus-4-7</text>
+      <text x="68" y="50" font-family="Inter" font-size="11" fill="#2563EB" font-weight="600">主道</text>
+
+      <!-- 中断闪电 -->
+      <g transform="translate(440, 60)">
+        <circle r="22" fill="#D97706" stroke="#FFFFFF" stroke-width="3"/>
+        <path d="M -5 -10 L 3 -2 L -2 0 L 5 10 L -3 2 L 2 0 z" fill="#FFFFFF" stroke="none"/>
+        <text y="48" font-family="IBM Plex Mono" font-size="11" fill="#D97706" text-anchor="middle" font-weight="700">529 overloaded</text>
+        <text y="62" font-family="IBM Plex Mono" font-size="9.5" fill="#D97706" text-anchor="middle">FallbackTriggeredError</text>
+      </g>
+
+      <!-- 切换弧线 opus -> sonnet -->
+      <path d="M 440 82 Q 540 130 640 175" stroke="#D97706" stroke-width="2" fill="none" stroke-dasharray="5,3" marker-end="url(#arr-fb-a)"/>
+
+      <!-- 备道 sonnet -->
+      <rect x="40" y="175" width="800" height="40" rx="20" fill="#FFFBF0" stroke="#D97706" stroke-width="1.5"/>
+      <text x="68" y="201" font-family="IBM Plex Mono" font-size="12" fill="#D97706" font-weight="700">sonnet-4-6</text>
+      <text x="68" y="165" font-family="Inter" font-size="11" fill="#D97706" font-weight="600">备道</text>
+      <text x="700" y="201" font-family="IBM Plex Mono" font-size="11" fill="#D97706" font-weight="600">while 转一圈 · 重发 →</text>
+
+      <!-- divider -->
+      <text x="440" y="240" font-family="Inter" font-size="11.5" fill="#5E5D5A" text-anchor="middle" font-weight="600">catch 块做 5 件事</text>
+    </svg>
+  </div>
+
+  <div class="fb-steps">
+    <div class="fb-step"><span class="n">STEP 1</span><b>切模型</b>currentModel<br>opus → sonnet</div>
+    <div class="fb-step"><span class="n">STEP 2</span><b>清空累积</b><code>assistantMessages</code><br><code>toolResults</code></div>
+    <div class="fb-step"><span class="n">STEP 3</span><b>补 tombstone</b>给已 yield 的<br>tool_use 划掉</div>
+    <div class="fb-step"><span class="n">STEP 4</span><b>重建 executor</b>discard 旧的<br>streamingToolExecutor</div>
+    <div class="fb-step"><span class="n">STEP 5</span><b>剥 thinking 签名</b>opus 签名 sonnet<br>不认 → 400</div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 8. Terminal 卡牌墙 ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="ord">08</span>10 种结局 · 所有出口穷举</h2>
+  <p class="lead">queryLoop 不抛异常 —— 所有路径最终都收敛到 10 个 Terminal 字符串之一。绿 = 正常 / 琥珀 = 资源耗尽 / 红 = 错误 / 灰 = 中断 / 紫 = hook。</p>
+
+  <div class="term">
+    <div class="t ok">
+      <div class="nm">completed</div>
+      <div class="ds">happy path 终点 — 模型没要工具、stop hook 不拦</div>
+      <div class="tg">normal</div>
+    </div>
+    <div class="t warn">
+      <div class="nm">max_turns</div>
+      <div class="ds">超 SDK 硬上限（如 50 轮）</div>
+      <div class="tg">budget</div>
+    </div>
+    <div class="t warn">
+      <div class="nm">blocking_limit</div>
+      <div class="ds">token 硬阻断 — 所有自动恢复都没救住</div>
+      <div class="tg">budget</div>
+    </div>
+    <div class="t err">
+      <div class="nm">prompt_too_long</div>
+      <div class="ds">withheld error 兜底失败 — collapse + reactive compact 都没救住</div>
+      <div class="tg">error</div>
+    </div>
+    <div class="t err">
+      <div class="nm">image_error</div>
+      <div class="ds">图像 token 计数或解码异常</div>
+      <div class="tg">error</div>
+    </div>
+    <div class="t err">
+      <div class="nm">model_error</div>
+      <div class="ds">模型侧不可恢复异常</div>
+      <div class="tg">error</div>
+    </div>
+    <div class="t gray">
+      <div class="nm">aborted_streaming</div>
+      <div class="ds">stream 中途被 abort signal 切断</div>
+      <div class="tg">abort</div>
+    </div>
+    <div class="t gray">
+      <div class="nm">aborted_tools</div>
+      <div class="ds">工具执行阶段被取消</div>
+      <div class="tg">abort</div>
+    </div>
+    <div class="t hook">
+      <div class="nm">stop_hook_prevented</div>
+      <div class="ds">stop hook 主动拦停 — 阻止 completed</div>
+      <div class="tg">hook</div>
+    </div>
+    <div class="t hook">
+      <div class="nm">hook_stopped</div>
+      <div class="ds">其他 hook 触发停止</div>
+      <div class="tg">hook</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ Footer ═══════════════════ -->
+<div class="foot">
+  <div class="sig">CC 源码探索 · 01 · queryLoop</div>
+  chen.zhe · 2026-05-25 · <a href="https://github.com/boris-dotv/cc.v">github.com/boris-dotv/cc.v</a><br>
+  下一篇 → queryLoop 的边角细节（using / 队列 / messages 改造闸门）
+</div>
+
+</div>
+</body>
+</html>

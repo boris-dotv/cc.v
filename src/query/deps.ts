@@ -1,7 +1,10 @@
 import { randomUUID } from 'crypto'
 import { queryModelWithStreaming } from '../services/api/claude.js'
+// 文件明明叫 claude.ts,为什么 import 写 .js? 因为这是给运行时看的,不是给 TS 编译器看的。
 import { autoCompactIfNeeded } from '../services/compact/autoCompact.js'
 import { microcompactMessages } from '../services/compact/microCompact.js'
+
+// CC 代码里所有 import 都写 .js,即使源文件是 .ts。这不是 bug。 
 
 // -- deps
 
@@ -18,6 +21,8 @@ import { microcompactMessages } from '../services/compact/microCompact.js'
 //
 // Scope is intentionally narrow (4 deps) to prove the pattern. Followup
 // PRs can add runTools, handleStopHooks, logEvent, queue ops, etc.
+
+// 此处的 type 类比 python 的 @dataclass
 export type QueryDeps = {
   // -- model
   callModel: typeof queryModelWithStreaming

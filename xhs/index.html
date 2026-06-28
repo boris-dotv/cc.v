@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>queryLoop · CC harness 主循环精读</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&family=Playfair+Display:wght@400;500;600;700&display=swap');
+:root{--bg:#F3F1EC;--bg2:#FFFFFF;--bg3:#FAF9F6;--txt:#141413;--txt2:#5E5D5A;--txt3:#8A8884;--txtf:#B0AEA9;--bdr:rgba(20,20,19,.12);--bdr2:rgba(20,20,19,.06);--amber:#D97706;--amberbg:rgba(217,119,6,.06);--amberbr:rgba(217,119,6,.2);--moss:#4D7C0F;--mossbg:rgba(77,124,15,.06);--mossbr:rgba(77,124,15,.2);--blue:#3B82F6;--bluebg:rgba(59,130,246,.06);--bluebr:rgba(59,130,246,.18);--terra:#9F1239;--terrabg:rgba(159,18,57,.05);--terrabr:rgba(159,18,57,.18);--pink:#DB2777;--pinkbg:rgba(219,39,119,.05);--pinkbr:rgba(219,39,119,.18);--violet:#6D28D9;--violetbg:rgba(109,40,217,.04);--violetbr:rgba(109,40,217,.18);--teal:#0E7490;--tealbg:rgba(14,116,144,.05);--tealbr:rgba(14,116,144,.18);--serif:'Playfair Display',Georgia,serif;--sans:'Inter','PingFang SC','Hiragino Sans GB','Microsoft YaHei',system-ui,sans-serif;--mono:'IBM Plex Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:rgba(20,20,19,.2);border-radius:4px}
+.pg{max-width:880px;margin:0 auto;padding:56px 40px 100px}
+
+/* Header */
+.hdr{text-align:center;padding:48px 0 40px;border-bottom:1px solid var(--bdr);margin-bottom:40px}
+.hdr .eyebrow{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--txt3);letter-spacing:.18em;text-transform:uppercase;margin-bottom:14px}
+.hdr h1{font-family:var(--serif);font-size:42px;font-weight:700;color:var(--txt);letter-spacing:-.03em;margin-bottom:10px;line-height:1.15}
+.hdr h1 code{font-family:var(--mono);font-size:36px;font-weight:600;background:none;padding:0}
+.hdr .sub{font-family:var(--sans);font-size:15px;color:var(--txt2);line-height:1.6;max-width:680px;margin:0 auto}
+.hdr .specs{font-family:var(--mono);font-size:12px;color:var(--txt3);margin-top:18px;display:flex;justify-content:center;gap:20px;flex-wrap:wrap}
+.hdr .specs span{position:relative}
+.hdr .specs span+span::before{content:'·';position:absolute;left:-13px;color:var(--txtf)}
+
+/* Specs strip */
+.specs-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-bottom:32px;border:1px solid var(--bdr2);border-radius:10px;overflow:hidden}
+.spec-cell{padding:18px 16px;border-right:1px solid var(--bdr2);background:var(--bg3);text-align:center}
+.spec-cell:last-child{border-right:none}
+.spec-num{font-family:var(--mono);font-size:24px;font-weight:700;color:var(--txt);line-height:1.2}
+.spec-label{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--txt2);margin-top:4px}
+.spec-sub{font-size:10px;color:var(--txt3);margin-top:4px;line-height:1.45}
+
+/* Section card */
+.SEC{border:1px solid var(--bdr);border-radius:12px;padding:28px 32px;margin:0 0 28px;background:var(--bg2);box-shadow:0 1px 3px rgba(0,0,0,.03)}
+.SEC h2{font-family:var(--serif);font-size:22px;font-weight:600;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--bdr2);color:var(--txt);letter-spacing:-.01em}
+.SEC h2 .num{font-family:var(--mono);font-size:13px;color:var(--txt3);margin-right:10px;font-weight:600;vertical-align:middle;letter-spacing:.05em}
+.SEC p{color:var(--txt2);margin-bottom:12px;font-size:14.5px;line-height:1.75}
+.SEC p:last-child{margin-bottom:0}
+.SEC strong{color:var(--txt);font-weight:600}
+.SEC code{font-family:var(--mono);font-size:12.5px;background:var(--bg3);color:var(--terra);padding:1.5px 6px;border-radius:4px;border:1px solid var(--bdr2);white-space:nowrap}
+
+/* Sub-section title */
+.sec-sub{font-family:var(--sans);font-size:14px;font-weight:600;color:var(--txt);margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+.sec-sub:first-of-type{margin-top:6px}
+.sec-sub .pill{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--moss);background:var(--mossbg);border:1px solid var(--mossbr);padding:2px 8px;border-radius:4px;letter-spacing:.04em}
+
+/* Pre code blocks (ASCII flowcharts) */
+.flow{background:var(--bg3);border:1px solid var(--bdr2);border-radius:10px;padding:20px 22px;margin:16px 0;overflow-x:auto;font-family:var(--mono);font-size:11.5px;line-height:1.65;color:var(--txt2);white-space:pre}
+.flow .hi{color:var(--moss);font-weight:600}
+.flow .hi-am{color:var(--amber);font-weight:600}
+.flow .hi-tx{color:var(--txt);font-weight:600}
+.flow .cm{color:var(--txt3)}
+
+/* Notes */
+.formula-box{background:var(--bg3);border:1px solid var(--bdr2);border-radius:10px;padding:16px 20px;margin:16px 0;font-family:var(--sans);font-size:13px;color:var(--txt2);line-height:1.65}
+.formula-box strong{color:var(--txt)}
+
+.note-box{border-radius:8px;padding:14px 18px;font-size:13px;line-height:1.65;margin:14px 0}
+.note-box.amber{background:var(--amberbg);border:1px solid var(--amberbr);color:var(--txt2)}
+.note-box.amber strong{color:var(--amber)}
+.note-box.moss{background:var(--mossbg);border:1px solid var(--mossbr);color:var(--txt2)}
+.note-box.moss strong{color:var(--moss)}
+.note-box.violet{background:var(--violetbg);border:1px solid var(--violetbr);color:var(--txt2)}
+.note-box.violet strong{color:var(--violet)}
+.note-box.blue{background:var(--bluebg);border:1px solid var(--bluebr);color:var(--txt2)}
+.note-box.blue strong{color:var(--blue)}
+
+/* Soul callout — the one big highlight */
+.soul{background:linear-gradient(135deg,var(--violetbg),rgba(109,40,217,.02));border:1px solid var(--violetbr);border-radius:12px;padding:22px 26px;margin:18px 0;text-align:center}
+.soul .label{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--violet);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px}
+.soul .code{font-family:var(--mono);font-size:14px;color:var(--txt);background:var(--bg2);border:1px solid var(--bdr2);border-radius:6px;padding:10px 14px;display:inline-block;margin-bottom:10px;max-width:100%;overflow-x:auto;white-space:nowrap}
+.soul .desc{font-family:var(--sans);font-size:13px;color:var(--txt2);line-height:1.6}
+
+/* Tables */
+.mode-table{width:100%;border-collapse:collapse;margin:14px 0;border:1px solid var(--bdr2);border-radius:10px;overflow:hidden}
+.mode-table th{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;padding:11px 14px;text-align:left;background:var(--bg3);border-bottom:1px solid var(--bdr2);white-space:nowrap}
+.mode-table td{padding:13px 14px;border-bottom:1px solid var(--bdr2);font-family:var(--mono);font-size:12px;vertical-align:top;color:var(--txt2);line-height:1.6}
+.mode-table tr:last-child td{border-bottom:none}
+.mode-table tr:hover td{background:rgba(77,124,15,.015)}
+.mode-name{font-weight:600;color:var(--txt)}
+.mode-desc{font-family:var(--sans);font-size:11.5px;color:var(--txt3);margin-top:3px;line-height:1.55;font-weight:400}
+
+/* Step cards (流循环体 3 个职责 / fallback 5 步) */
+.steps{display:grid;gap:14px;margin:16px 0}
+.step{display:grid;grid-template-columns:42px 1fr;gap:14px;border:1px solid var(--bdr2);border-radius:10px;padding:16px 20px;background:var(--bg3)}
+.step-num{font-family:var(--serif);font-size:26px;font-weight:700;color:var(--moss);line-height:1;align-self:start}
+.step-body{font-size:13.5px;color:var(--txt2);line-height:1.65}
+.step-body strong{color:var(--txt);font-weight:600;font-family:var(--sans);font-size:14px;display:block;margin-bottom:4px}
+.step-body code{font-family:var(--mono);font-size:11.5px;background:var(--bg2);color:var(--terra);padding:1px 5px;border-radius:3px;border:1px solid var(--bdr2)}
+
+/* Tag pills */
+.tag-new{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--moss);background:rgba(77,124,15,.12);padding:2px 6px;border-radius:3px;border:1px solid var(--mossbr);display:inline-block;margin-left:6px;vertical-align:middle;letter-spacing:.04em}
+.tag-warn{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--amber);background:var(--amberbg);padding:2px 6px;border-radius:3px;border:1px solid var(--amberbr);display:inline-block;margin-left:6px;vertical-align:middle;letter-spacing:.04em}
+
+/* Decision tree list (流后决策树) */
+.tree{font-family:var(--mono);font-size:12px;color:var(--txt2);line-height:1.85;padding:18px 20px;background:var(--bg3);border:1px solid var(--bdr2);border-radius:10px;margin:14px 0}
+.tree .br{color:var(--txt);font-weight:600}
+.tree .ok{color:var(--moss);font-weight:600}
+.tree .err{color:var(--terra);font-weight:600}
+.tree .arrow{color:var(--txtf)}
+.tree .ind1{padding-left:18px}
+.tree .ind2{padding-left:36px}
+.tree .ind3{padding-left:54px}
+
+/* Footer */
+.foot{text-align:center;padding:32px 0 8px;color:var(--txt3);font-family:var(--mono);font-size:11px;line-height:1.7;border-top:1px solid var(--bdr2);margin-top:8px}
+.foot a{color:var(--txt2);text-decoration:none;border-bottom:1px solid var(--bdr2)}
+.foot a:hover{color:var(--txt);border-color:var(--txt2)}
+
+@media(max-width:760px){
+  .pg{padding:32px 18px 60px}
+  .hdr{padding:24px 0 28px;margin-bottom:28px}
+  .hdr h1{font-size:30px}
+  .hdr h1 code{font-size:26px}
+  .hdr .sub{font-size:13.5px}
+  .specs-strip{grid-template-columns:1fr 1fr}
+  .spec-cell:nth-child(2){border-right:none}
+  .spec-cell:nth-child(3),.spec-cell:nth-child(4){border-top:1px solid var(--bdr2)}
+  .SEC{padding:20px 18px;margin-bottom:20px}
+  .SEC h2{font-size:18px}
+  .flow{font-size:10.5px;padding:14px 14px}
+  .soul .code{font-size:11.5px}
+  .step{grid-template-columns:32px 1fr;gap:10px;padding:14px 16px}
+  .step-num{font-size:22px}
+}
+</style>
+</head>
+<body>
+<div class="pg">
+
+<!-- ═══════════════════ Header ═══════════════════ -->
+<div class="hdr">
+  <div class="eyebrow">CC 源码探索 · Day 0</div>
+  <h1><code>queryLoop</code> · CC harness 主循环</h1>
+  <div class="sub">
+    <code style="font-family:var(--mono);font-size:13px;background:var(--bg3);padding:2px 8px;border-radius:4px;border:1px solid var(--bdr2);color:var(--txt2)">src/query.ts</code>
+    1729 行精读 · 蓝图 + 11 节前置知识 · 只看主干，不看肉
+  </div>
+  <div class="specs">
+    <span>chen.zhe</span>
+    <span>2026-05-24</span>
+    <span>Day 0</span>
+  </div>
+</div>
+
+<!-- ═══════════════════ Stats strip ═══════════════════ -->
+<div class="specs-strip">
+  <div class="spec-cell">
+    <div class="spec-num">1729</div>
+    <div class="spec-label">总行数</div>
+    <div class="spec-sub">src/query.ts</div>
+  </div>
+  <div class="spec-cell">
+    <div class="spec-num">~50</div>
+    <div class="spec-label">流循环体</div>
+    <div class="spec-sub">最值得细读</div>
+  </div>
+  <div class="spec-cell">
+    <div class="spec-num">9</div>
+    <div class="spec-label">循环步骤</div>
+    <div class="spec-sub">while(true) 内</div>
+  </div>
+  <div class="spec-cell">
+    <div class="spec-num">10</div>
+    <div class="spec-label">Terminal 退出</div>
+    <div class="spec-sub">穷举所有路径</div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 主题 ═══════════════════ -->
+<div class="SEC">
+  <h2>主题</h2>
+  <p>
+    <code>src/query.ts</code> 里的 <code>queryLoop</code> —— Claude Code harness 的<strong>主循环</strong>。整个 agent 在干的事情，本质就是这个 generator 里 <code>while (true)</code> 在驱动。
+  </p>
+  <p>
+    所有 agent harness 都绕不开这个形状。今天看清楚这个形状，后面所有文件都是在给这个骨架挂肉。
+  </p>
+  <div class="note-box violet">
+    <strong>一句话总结：</strong>
+    <code style="background:none;border:none;padding:0;color:var(--violet)">query()</code> 是壳子，<code style="background:none;border:none;padding:0;color:var(--violet)">queryLoop()</code> 是节拍器。所有 agent 主循环长得都一样。
+  </div>
+</div>
+
+<!-- ═══════════════════ 蓝图 ═══════════════════ -->
+<div class="SEC">
+  <h2>蓝图</h2>
+  <p>整张图 ENTER → while 9 步 → EXIT。<strong>所有带 <code>feature()</code> gate 的策略层今天全部跳过</strong>，只看主干。</p>
+
+  <div class="flow"><span class="hi-tx">ENTER queryLoop</span>
+  ├─ destructure 8 个不变参数 (systemPrompt, canUseTool, ...)
+  ├─ 初始化 9 字段 state (messages, toolUseContext, turnCount=1, ...)
+  ├─ buildQueryConfig() <span class="cm">一次性快照 env/statsig/session</span>
+  └─ using pendingMemoryPrefetch <span class="cm">(退出时自动 dispose)</span>
+
+  <span class="hi-tx">while (true):</span>
+    <span class="hi">①</span> destructure state <span class="cm">(toolUseContext: let, 其余 const)</span>
+    <span class="hi">②</span> yield 'stream_request_start'
+    <span class="hi">③</span> messages → messagesForQuery <span class="hi-tx">改造主干</span>
+         getMessagesAfterCompactBoundary
+           → applyToolResultBudget
+             → microcompact
+               → autocompact
+                 → blocking check <span class="hi-am">(硬阻断 → return 'blocking_limit')</span>
+    <span class="hi">④</span> for await (msg of deps.callModel({...})) {   <span class="cm">← 流循环体，3 职责</span>
+          (a) tombstone <span class="cm">(fallback 触发时清空已 yield)</span>
+          (b) clone &amp; yield <span class="cm">(tool_use input backfill, 不动原始)</span>
+          (c) push &amp; 收集 tool_use → <span class="hi">needsFollowUp</span>
+       }
+    <span class="hi">⑤</span> if (!needsFollowUp):
+         • 处理 withheld 错误 (prompt_too_long / max_output_tokens)
+         • 跑 stop hooks
+         • <span class="hi">return 'completed'</span>   <span class="cm">◄── happy path 终点</span>
+
+       else (needsFollowUp === true):
+         落到 ⑥
+
+    <span class="hi">⑥</span> runTools(toolUseBlocks, assistantMessages, canUseTool, toolUseContext)
+         → for await update: yield msg, push toolResults
+    <span class="hi">⑦</span> 拼 attachments / memory consume / skill consume
+       / refresh tools / maxTurns 检查
+    <span class="hi">⑧</span> state = {
+         messages: <span class="hi-tx">[...messagesForQuery, ...assistantMessages, ...toolResults]</span>,
+         turnCount: nextTurnCount, ...
+       }
+    <span class="hi">⑨</span> continue ────────────────────────────────────┐
+                                                    ↓
+                                             (回到 while 顶)
+
+<span class="hi-tx">EXIT queryLoop</span>
+  return Terminal:
+    'completed' | 'max_turns' | 'blocking_limit' | 'prompt_too_long' |
+    'image_error' | 'model_error' | 'aborted_streaming' | 'aborted_tools' |
+    'stop_hook_prevented' | 'hook_stopped'</div>
+
+  <div class="soul">
+    <div class="label">骨架最重要的一行（站点 ⑧）</div>
+    <div class="code">messages: [...messagesForQuery, ...assistantMessages, ...toolResults]</div>
+    <div class="desc">下一轮的 messages = 这一轮喂 API 的输入 + assistant 回复 + 工具结果。<strong style="color:var(--violet)">这就是 ping-pong 累积</strong>。</div>
+  </div>
+</div>
+
+<!-- ═══════════════════ 前置知识标题 ═══════════════════ -->
+<div class="SEC" style="background:transparent;border:none;box-shadow:none;padding:8px 0 0;margin-bottom:20px">
+  <h2 style="border-bottom:none;padding-bottom:0;font-size:26px;text-align:center">前置知识 · 11 节</h2>
+  <p style="text-align:center;color:var(--txt3);font-size:13px;margin-top:4px">按 queryLoop 流向 + 讨论顺序</p>
+</div>
+
+<!-- ═══════════════════ 1. 外壳与调用链 ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="num">01</span>外壳与调用链</h2>
+  <p><code>query()</code>（line 219-239）是壳子，只负责包一层、管 queue lifecycle。<code>queryLoop()</code> 才是<strong>节拍器</strong>。</p>
+  <p><code>query()</code> 对外只 yield 两类东西：流事件（<code>StreamEvent</code> / <code>RequestStartEvent</code>）和消息（<code>Message</code> 系列）。最后 <code>return</code> 一个 <code>Terminal</code> 告诉外面"为什么结束"。</p>
+
+  <div class="flow"><span class="hi-tx">调用链</span>
+  用户在 REPL 输入 "foo"
+       ↓
+  PromptInput.tsx 提交                          <span class="cm">(UI 层)</span>
+       ↓
+  QueryEngine.submitMessage(userInput)          <span class="cm">(orchestrator)</span>
+       │  • 拼 messages / systemPrompt / userContext / systemContext
+       │  • 创建 toolUseContext (abortController, queryTracking, ...)
+       │  • 决定 fallbackModel
+       │  • 打包成 QueryParams
+       ↓
+  query(params)                                 <span class="cm">(今天读的文件)</span>
+       ↓
+  queryLoop(...)                                <span class="cm">(节拍器)</span></div>
+
+  <div class="note-box moss">
+    <strong>"消费者" 是什么？</strong>不是用户（人）。是<strong>调用 <code style="background:none;border:none;padding:0;color:var(--moss)">for await (const event of query(params))</code> 那段代码</strong>，即 QueryEngine。它把 yield 的事件分发给 UI / SDK / transcript。<strong>消费者是上一层代码，不是人</strong>。
+  </div>
+</div>
+
+<!-- ═══════════════════ 2. consumedCommandUuids ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="num">02</span><code>consumedCommandUuids</code> 与队列消息</h2>
+  <p>用户在 CC 跑长任务时排队的消息（比如 "顺便把 README 也更新一下"）会进 <code>messageQueueManager</code>，每条带一个 uuid。</p>
+  <p>queryLoop 跑到 line 1604 <code>getCommandsByMaxPriority</code> 时把它们拉出来变 attachment，uuid push 进 <code>consumedCommandUuids</code>，同时 <code>notifyCommandLifecycle(uuid, 'started')</code>。</p>
+  <p>等整个 queryLoop <strong>正常 return</strong> 后，外层 <code>query()</code> 才统一发 <code>'completed'</code>。</p>
+
+  <div class="note-box amber">
+    <strong>asymmetric 信号：</strong>出错或被打断 → uuid 只有 'started' 没有 'completed'，UI 据此画"被中断的排队消息"。
+  </div>
+</div>
+
+<!-- ═══════════════════ 3. immutable params ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="num">03</span>8 个 immutable params <span class="tag-new">查询生命周期不变</span></h2>
+  <table class="mode-table">
+    <thead>
+      <tr><th>字段</th><th>具体例子</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="mode-name">systemPrompt</span></td>
+        <td>完整拼好的 system prompt（"You are Claude Code..." 加几千 token 工具说明）</td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">userContext</span></td>
+        <td>每条 user message <strong>前置</strong>的 meta，如 <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra);font-size:11px">&lt;system-reminder&gt;...&lt;/system-reminder&gt;</code></td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">systemContext</span></td>
+        <td>每条 system 消息<strong>附加</strong>的内容，如 git status、CLAUDE.md 摘录</td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">canUseTool</span></td>
+        <td>决定 tool 是否被允许的函数（bypass 直接 allow / 否则弹窗）</td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">fallbackModel</span></td>
+        <td>主 <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra);font-size:11px">claude-opus-4-7</code>，fallback <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra);font-size:11px">claude-sonnet-4-6</code></td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">querySource</span></td>
+        <td><code style="background:var(--bg3);padding:1px 4px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra);font-size:11px">'repl_main_thread'</code> / <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra);font-size:11px">'agent:Explore'</code> / <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra);font-size:11px">'compact'</code></td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">maxTurns</span></td>
+        <td>SDK 硬上限（如 50），超了 return <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra);font-size:11px">'max_turns'</code></td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">skipCacheWrite</span></td>
+        <td>不污染父 agent 的 prompt cache</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="formula-box">
+    <strong>为什么 immutable：</strong>这些由用户输入或 session config 决定。改了 systemPrompt 会破 cache、改了 canUseTool 会让权限语义跳变。
+  </div>
+</div>
+
+<!-- ═══════════════════ 4. mutable state ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="num">04</span>9 字段 mutable state <span class="tag-warn">每轮可重写</span></h2>
+  <p>每个 <code>continue</code> 站点<strong>整体重写</strong> <code>state = { ... }</code>，不是零散改字段。</p>
+  <table class="mode-table">
+    <thead>
+      <tr><th>字段</th><th>演化</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="mode-name">messages</span></td>
+        <td>turn 1: <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra);font-size:11px">[user1]</code> → turn 2: <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra);font-size:11px">[user1, assistant1, tool_result1]</code> → ... <strong>每轮递增</strong></td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">toolUseContext</span></td>
+        <td>queryTracking / readFileState / abortController / options.tools — 轮内可能被 <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra);font-size:11px">{...spread}</code> 重写好几次</td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">turnCount</span></td>
+        <td>1 → 2 → 3 ... 每完成一次 ping-pong 加 1</td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">transition</span></td>
+        <td><code style="background:var(--bg3);padding:1px 4px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra);font-size:11px">{reason: 'next_turn' / 'max_output_tokens_recovery' / ...}</code> telemetry/debug</td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">autoCompactTracking</span></td>
+        <td>undefined → <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra);font-size:11px">{compacted:true, turnId, turnCounter:0}</code>，"距上次 compact 多少轮"</td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">maxOutputTokensOverride</span></td>
+        <td>undefined → <code style="background:var(--bg3);padding:1px 4px;border-radius:3px;border:1px solid var(--bdr2);color:var(--terra);font-size:11px">ESCALATED_MAX_TOKENS</code>（8k 上限被截 → 升 64k 重发）</td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">maxOutputTokensRecoveryCount</span></td>
+        <td>0 → 1 → 2，超 limit 放弃</td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">hasAttemptedReactiveCompact</span></td>
+        <td>false → true，turn 内一次性闸门</td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">stopHookActive</span></td>
+        <td>undefined → true，避免 stop hook 无限重试</td>
+      </tr>
+      <tr>
+        <td><span class="mode-name">pendingToolUseSummary</span></td>
+        <td>haiku 异步生成的 tool batch 摘要 Promise，下一轮 await 并 yield</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note-box moss">
+    <strong>let/const 信号：</strong>迭代顶部 destructure 时 <code style="background:none;border:none;padding:0;color:var(--moss)">let { toolUseContext }</code>、其余全 <code style="background:none;border:none;padding:0;color:var(--moss)">const</code> —— 明确告诉你"轮内只有 <code style="background:none;border:none;padding:0;color:var(--moss)">toolUseContext</code> 会被原地改写"。
+  </div>
+</div>
+
+<!-- ═══════════════════ 5. using ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="num">05</span><code>using</code> + TC39 dispose</h2>
+  <p><code>using</code> 是 JS 新语法（TS 5.2+、Node 22+），声明带 <code>Symbol.dispose</code> 的变量，<strong>离开 scope 自动 dispose</strong>。</p>
+  <p>在 generator 里覆盖 3 种退出方式：</p>
+  <ol style="margin:8px 0 12px 28px;color:var(--txt2);font-size:14px;line-height:1.85">
+    <li>正常 return</li>
+    <li>抛异常</li>
+    <li><strong>消费者调 <code>.return()</code></strong> ← 这种用 try/finally 很难写漂亮</li>
+  </ol>
+  <p><code>using</code> 把"退出时做什么"绑死在声明上。</p>
+
+  <div class="formula-box">
+    <strong>具体到 queryLoop：</strong><code>pendingMemoryPrefetch</code> 是个背景 Promise（去 sideQuery 问哪些 memory 跟当前对话相关），dispose 时记 telemetry 并 abort 没用完的请求。<br><br>
+    <strong>做新 harness 时一定会碰到一样的问题：</strong>长 generator 里启动了背景任务，generator 怎么死它们就得跟着死。可以参考这个模式。
+  </div>
+</div>
+
+<!-- ═══════════════════ 6. messages 改造 ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="num">06</span>messages 改造主干 <span class="tag-new">callModel 之前</span></h2>
+  <p>只看主干、忽略所有 <code>feature()</code> gate 后的分支：</p>
+
+  <div class="flow"><span class="hi-tx">messages</span>
+    ↓ getMessagesAfterCompactBoundary     <span class="cm">截掉 compact 边界前的旧消息</span>
+    ↓ applyToolResultBudget               <span class="cm">大 tool result → placeholder</span>
+    ↓ microcompact                        <span class="cm">微压缩</span>
+    ↓ autocompact                         <span class="cm">大压缩（必要时整段重写）</span>
+    ↓ calculateTokenWarningState          <span class="hi-am">硬阻断 → return 'blocking_limit'</span>
+<span class="hi-tx">messagesForQuery</span></div>
+
+  <p><code>applyToolResultBudget</code> 是典型上下文管理策略：尾部新结果保留细节，头部老结果替换成 placeholder（<code>"[content removed to fit budget]"</code>），替换记录写到 <code>contentReplacementState</code>。</p>
+
+  <div class="note-box amber">
+    <strong>blocking_limit 是终点，不是恢复入口</strong> —— 它的前提是上游所有自动恢复路径（snip / microcompact / autocompact / reactiveCompact / collapse）都被跳过或失败了。出现这个 return 后，用户得手动跑 <code style="background:none;border:none;padding:0;color:var(--amber)">/compact</code>。
+  </div>
+</div>
+
+<!-- ═══════════════════ 7. callModel ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="num">07</span><code>deps.callModel</code> 是 harness 与 API 唯一接触点</h2>
+  <p><code>callModel</code> 由 <code>productionDeps()</code> 注入。整个 harness 跟 Anthropic API 的所有交互都通过它。</p>
+  <p>外层 <code>while (attemptWithFallback)</code> 是为 fallback 模型准备的（主模型超载 → fallback 重发一次）。一次正常请求里只跑一遍。</p>
+
+  <div class="note-box violet">
+    <strong>做新 harness 时</strong>能不能干净替换 <code style="background:none;border:none;padding:0;color:var(--violet)">deps</code>，就是抽象做得好不好的指标。
+  </div>
+</div>
+
+<!-- ═══════════════════ 8. 流循环体三职责 ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="num">08</span>流循环体的三个职责 <span class="tag-new">最值得细读的 ~50 行</span></h2>
+  <p>代码里已经用 <code>⭐ START</code> / <code>⭐ END</code> 注释包住了。每条 stream message 进来做三件事：</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">①</div>
+      <div class="step-body">
+        <strong>是否要 tombstone？</strong>
+        fallback 触发过的话，之前累积的 assistant message 全作废 —— 清空 <code>assistantMessages</code> / <code>toolResults</code> / <code>toolUseBlocks</code>，并给已经 yield 出去的 tool_use 补 tombstone 让 UI 划掉。
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">②</div>
+      <div class="step-body">
+        <strong>是否要 clone &amp; yield？</strong>
+        <code>tool_use</code> 块要 backfill 派生字段（比如 file path 展开），<strong>但只 clone 给"对外 yield 的那份"，原始 message 不动</strong>。原因：原始 message 要回灌 API，mutate 会破 byte-level prompt cache。
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">③</div>
+      <div class="step-body">
+        <strong>是否要 push &amp; 记录 tool_use？</strong>
+        <code>message.type === 'assistant'</code> 时 push 到 <code>assistantMessages</code>，扫 content 收集 <code>tool_use</code> 块。<strong>任何 tool_use 出现就置 <code>needsFollowUp = true</code></strong>。这是"要不要再来一轮"的唯一信号。
+      </div>
+    </div>
+  </div>
+
+  <div class="formula-box">
+    <strong>为什么这 50 行最重要：</strong>这是 harness 唯一处理"模型在说什么"的地方。所有关于 streaming 协议的假设（消息是 multi-block 的、可能有 thinking、可能有 tool_use 穿插、可能中途断流）都在这里固化。一份 message 在这里被分成 3 个去向：① yield 给消费者（UI 看的）、② push 到 assistantMessages（要回灌 API，必须不变）、③ 喂给 streamingToolExecutor。每个去向对消息的要求都不一样 —— 这就是 backfill clone 那套绕弯的根本原因。
+  </div>
+</div>
+
+<!-- ═══════════════════ 9. fallback ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="num">09</span>fallback = 主模型超载切备份</h2>
+  <p>API 返回 529 overloaded → SDK 抛 <code>FallbackTriggeredError</code> → catch 接住做 5 件事：</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">①</div>
+      <div class="step-body">切 <code>currentModel</code>（opus → sonnet）</div>
+    </div>
+    <div class="step">
+      <div class="step-num">②</div>
+      <div class="step-body">清空 <code>assistantMessages</code> / <code>toolResults</code> / <code>toolUseBlocks</code></div>
+    </div>
+    <div class="step">
+      <div class="step-num">③</div>
+      <div class="step-body">给已 yield 的 tool_use 补 tombstone（<code>yieldMissingToolResultBlocks</code>）让 UI 划掉</div>
+    </div>
+    <div class="step">
+      <div class="step-num">④</div>
+      <div class="step-body">discard 乐观启动的 <code>streamingToolExecutor</code>，新建一个干净的</div>
+    </div>
+    <div class="step">
+      <div class="step-num">⑤</div>
+      <div class="step-body"><strong>剥 thinking 签名</strong>（<code>stripSignatureBlocks</code>）。opus 的签名 sonnet 不认，不剥会 API 400。</div>
+    </div>
+  </div>
+  <p>然后外层 while 转一圈重发。</p>
+</div>
+
+<!-- ═══════════════════ 10. 决策树 ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="num">10</span>流结束后的决策树</h2>
+  <p>流读完了，决定 <strong>return 还是 continue</strong>。照着 <code>needsFollowUp</code> 二分：</p>
+
+  <div class="tree"><span class="br">if (aborted)</span> <span class="arrow">→</span> <span class="err">return 'aborted_streaming'</span>
+
+<span class="br">if (!needsFollowUp):</span>           <span style="color:var(--txt3)">← 模型没要工具</span>
+<span class="ind1">• 处理 withheld 错误</span>
+<span class="ind2">prompt_too_long <span class="arrow">→</span> collapse drain / reactive compact</span>
+<span class="ind3"><span class="arrow">→</span> 成功 <span class="ok">continue</span> / 失败 <span class="err">return</span></span>
+<span class="ind2">max_output_tokens <span class="arrow">→</span> 升 cap / 注入恢复消息</span>
+<span class="ind3"><span class="arrow">→</span> <span class="ok">continue</span> / 用完恢复次数 露出错误</span>
+<span class="ind1">• 跑 stop hooks</span>
+<span class="ind2">prevent <span class="arrow">→</span> <span class="err">return 'stop_hook_prevented'</span></span>
+<span class="ind2">inject error <span class="arrow">→</span> <span class="ok">continue</span></span>
+<span class="ind2">pass <span class="arrow">→</span> 落下来</span>
+<span class="ind1">• <span class="ok">return 'completed'</span></span>   <span style="color:var(--txt3)">◄── happy path 终点</span>
+
+<span class="br">else:</span>                          <span style="color:var(--txt3)">← needsFollowUp === true</span>
+<span class="ind1">落到 runTools</span></div>
+
+  <div class="note-box moss">
+    <strong>恢复路径的共同模式：</strong>重新拼 <code style="background:none;border:none;padding:0;color:var(--moss)">next: State</code>，<code style="background:none;border:none;padding:0;color:var(--moss)">state = next; continue</code>。每个 <code style="background:none;border:none;padding:0;color:var(--moss)">continue</code> 站点整体重写 state。
+  </div>
+</div>
+
+<!-- ═══════════════════ 11. runTools + state 重组 ═══════════════════ -->
+<div class="SEC">
+  <h2><span class="num">11</span>runTools + 末尾 state 重组</h2>
+
+  <div class="flow"><span class="cm">// 跑工具，消费 stream of updates</span>
+const toolUpdates = runTools(toolUseBlocks, assistantMessages, canUseTool, toolUseContext)
+for await (const update of toolUpdates) {
+  if (update.message) {
+    yield update.message              <span class="cm">// 透传给消费者</span>
+    toolResults.push(...normalizeMessagesForAPI([update.message], ...))
+  }
+  if (update.newContext) {
+    updatedToolUseContext = { ...update.newContext, queryTracking }
+  }
+}</div>
+
+  <p>工具跑完后还要 push 一连串 attachment（queued commands、memory prefetch、skill prefetch、file changes），refresh tools，检查 maxTurns，最后：</p>
+
+  <div class="flow"><span class="hi-tx">state = {</span>
+  messages: <span class="hi">[...messagesForQuery, ...assistantMessages, ...toolResults]</span>,
+  toolUseContext: toolUseContextWithQueryTracking,
+  turnCount: nextTurnCount,
+  ...
+<span class="hi-tx">}</span>
+continue</div>
+
+  <div class="soul">
+    <div class="label">ping-pong 累积</div>
+    <div class="code">下一轮 messages = 这一轮喂 API 的输入 + assistant 回复 + 工具结果</div>
+    <div class="desc">这是整个 agent harness 的灵魂结构。所有 tool-using agent 都绕不开这个形状。</div>
+  </div>
+</div>
+
+<!-- ═══════════════════ Footer ═══════════════════ -->
+<div class="foot">
+  CC 源码探索 · Day 0 · queryLoop<br>
+  chen.zhe · 2026-05-24<br>
+  <a href="https://github.com/boris-dotv/cc.v">github.com/boris-dotv/cc.v</a>
+</div>
+
+</div>
+</body>
+</html>
